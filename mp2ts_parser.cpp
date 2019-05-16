@@ -2,7 +2,6 @@
 //
 // Mike Cancilla
 //
-// Deluxe Entertainment Corporation, 2016
 
 /*
 Taken from: http://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/M2TS.html
