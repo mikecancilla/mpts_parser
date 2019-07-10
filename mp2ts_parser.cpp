@@ -1,6 +1,8 @@
 // mp2ts_parser.cpp : Defines the entry point for the console application.
 //
-// Mike Cancilla
+// (C) 2019 Mike Cancilla
+//
+// Feel free to use this code.  An acknowledgement would be nice.
 //
 
 /*
