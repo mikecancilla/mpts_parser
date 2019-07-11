@@ -342,434 +342,462 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
         my_printf("        <tag>%d</tag>\n", descriptor_tag);
         my_printf("        <length>%d</length>\n", descriptor_length);
 
-        if (VIDEO_STREAM_DESCRIPTOR == descriptor_tag)
+        switch(descriptor_tag)
         {
-            /*
-                video_stream_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    multiple_frame_rate_flag 1 bslbf
-                    frame_rate_code 4 uimsbf
-                    MPEG_1_only_flag 1 bslbf
-                    constrained_parameter_flag 1 bslbf
-                    still_picture_flag 1 bslbf
-                    if (MPEG_1_only_flag = = '0') {
-                        profile_and_level_indication 8 uimsbf
-                        chroma_format 2 uimsbf
-                        frame_rate_extension_flag 1 bslbf
-                        Reserved 5 bslbf
-                    }
-                }
-            */
-
-            uint8_t multiple_frame_rate_flag = *p++;
-            uint8_t frame_rate_code = (multiple_frame_rate_flag & 0x78) >> 3;
-            uint8_t mpeg_1_only_flag = (multiple_frame_rate_flag & 0x04) >> 2;
-            uint8_t constrained_parameter_flag = (multiple_frame_rate_flag & 0x02) >> 1;
-            uint8_t still_picture_flag = (multiple_frame_rate_flag & 0x01);
-            multiple_frame_rate_flag >>= 7;
-
-            my_printf("        <type>video_stream_descriptor</type>\n");
-            my_printf("        <multiple_frame_rate_flag>%d</multiple_frame_rate_flag>\n", multiple_frame_rate_flag);
-            my_printf("        <frame_rate_code>0x%x</frame_rate_code>\n", frame_rate_code);
-            my_printf("        <mpeg_1_only_flag>%d</mpeg_1_only_flag>\n", mpeg_1_only_flag);
-            my_printf("        <constrained_parameter_flag>%d</constrained_parameter_flag>\n", constrained_parameter_flag);
-            my_printf("        <still_picture_flag>%d</still_picture_flag>\n", still_picture_flag);
-
-            if (!mpeg_1_only_flag)
+            case VIDEO_STREAM_DESCRIPTOR:
             {
-                uint8_t profile_and_level_indication = *p++;
-                uint8_t chroma_format = *p++;
-                uint8_t frame_rate_extension_flag = (chroma_format & 0x10) >> 4;
-                chroma_format >>= 6;
+                /*
+                    video_stream_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        multiple_frame_rate_flag 1 bslbf
+                        frame_rate_code 4 uimsbf
+                        MPEG_1_only_flag 1 bslbf
+                        constrained_parameter_flag 1 bslbf
+                        still_picture_flag 1 bslbf
+                        if (MPEG_1_only_flag = = '0') {
+                            profile_and_level_indication 8 uimsbf
+                            chroma_format 2 uimsbf
+                            frame_rate_extension_flag 1 bslbf
+                            Reserved 5 bslbf
+                        }
+                    }
+                */
+
+                uint8_t multiple_frame_rate_flag = *p++;
+                uint8_t frame_rate_code = (multiple_frame_rate_flag & 0x78) >> 3;
+                uint8_t mpeg_1_only_flag = (multiple_frame_rate_flag & 0x04) >> 2;
+                uint8_t constrained_parameter_flag = (multiple_frame_rate_flag & 0x02) >> 1;
+                uint8_t still_picture_flag = (multiple_frame_rate_flag & 0x01);
+                multiple_frame_rate_flag >>= 7;
+
+                my_printf("        <type>video_stream_descriptor</type>\n");
+                my_printf("        <multiple_frame_rate_flag>%d</multiple_frame_rate_flag>\n", multiple_frame_rate_flag);
+                my_printf("        <frame_rate_code>0x%x</frame_rate_code>\n", frame_rate_code);
+                my_printf("        <mpeg_1_only_flag>%d</mpeg_1_only_flag>\n", mpeg_1_only_flag);
+                my_printf("        <constrained_parameter_flag>%d</constrained_parameter_flag>\n", constrained_parameter_flag);
+                my_printf("        <still_picture_flag>%d</still_picture_flag>\n", still_picture_flag);
+
+                if (!mpeg_1_only_flag)
+                {
+                    uint8_t profile_and_level_indication = *p++;
+                    uint8_t chroma_format = *p++;
+                    uint8_t frame_rate_extension_flag = (chroma_format & 0x10) >> 4;
+                    chroma_format >>= 6;
                     
-                my_printf("        <profile_and_level_indication>0x%x</profile_and_level_indication>\n", profile_and_level_indication);
-                my_printf("        <chroma_format>%d</chroma_format>\n", chroma_format);
-                my_printf("        <frame_rate_extension_flag>%d</frame_rate_extension_flag>\n", frame_rate_extension_flag);
+                    my_printf("        <profile_and_level_indication>0x%x</profile_and_level_indication>\n", profile_and_level_indication);
+                    my_printf("        <chroma_format>%d</chroma_format>\n", chroma_format);
+                    my_printf("        <frame_rate_extension_flag>%d</frame_rate_extension_flag>\n", frame_rate_extension_flag);
+                }
             }
-        }
-        else if (AUDIO_STREAM_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                audio_stream_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    free_format_flag 1 bslbf
-                    ID 1 bslbf
-                    layer 2 bslbf
-                    variable_rate_audio_indicator 1 bslbf
-                    reserved 3 bslbf
-                }
-            */
-
-            uint8_t free_format_flag = *p++;
-            uint8_t id = (free_format_flag & 0x40) >> 6;
-            uint8_t layer = (free_format_flag & 0x30) >> 4;
-            uint8_t variable_rate_audio_indicator = (free_format_flag & 0x08) >> 3;
-
-            my_printf("        <type>audio_stream_descriptor</type>\n");
-            my_printf("        <free_format_flag>%d</free_format_flag>\n", free_format_flag);
-            my_printf("        <id>%d</id>\n", id);
-            my_printf("        <layer>%d</layer>\n", layer);
-            my_printf("        <variable_rate_audio_indicator>%d</variable_rate_audio_indicator>\n", variable_rate_audio_indicator);
-        }
-        else if (HIERARCHY_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                hierarchy_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    reserved 4 bslbf
-                    hierarchy_type 4 uimsbf
-                    reserved 2 bslbf
-                    hierarchy_layer_index 6 uimsbf
-                    reserved 2 bslbf
-                    hierarchy_embedded_layer_index 6 uimsbf
-                    reserved 2 bslbf
-                    hierarchy_channel 6 uimsbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>hierarchy_descriptor</type>\n");
-        }
-        else if (REGISTRATION_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                registration_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    format_identifier 32 uimsbf
-                    for (i = 0; i < N; i++){
-                        additional_identification_info 8 bslbf
+            break;
+            case AUDIO_STREAM_DESCRIPTOR:
+            {
+                /*
+                    audio_stream_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        free_format_flag 1 bslbf
+                        ID 1 bslbf
+                        layer 2 bslbf
+                        variable_rate_audio_indicator 1 bslbf
+                        reserved 3 bslbf
                     }
-                }
-            */
+                */
 
-            uint32_t format_identifier = read_4_bytes(p); p += 4;
+                uint8_t free_format_flag = *p++;
+                uint8_t id = (free_format_flag & 0x40) >> 6;
+                uint8_t layer = (free_format_flag & 0x30) >> 4;
+                uint8_t variable_rate_audio_indicator = (free_format_flag & 0x08) >> 3;
 
-            if(0x43554549 == format_identifier)
-                scte35_format_identifier = format_identifier; // Should be 0x43554549 (ASCII “CUEI”)
+                my_printf("        <type>audio_stream_descriptor</type>\n");
+                my_printf("        <free_format_flag>%d</free_format_flag>\n", free_format_flag);
+                my_printf("        <id>%d</id>\n", id);
+                my_printf("        <layer>%d</layer>\n", layer);
+                my_printf("        <variable_rate_audio_indicator>%d</variable_rate_audio_indicator>\n", variable_rate_audio_indicator);
+            }
+            break;
+            case HIERARCHY_DESCRIPTOR:
+            {
+                /*
+                    hierarchy_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        reserved 4 bslbf
+                        hierarchy_type 4 uimsbf
+                        reserved 2 bslbf
+                        hierarchy_layer_index 6 uimsbf
+                        reserved 2 bslbf
+                        hierarchy_embedded_layer_index 6 uimsbf
+                        reserved 2 bslbf
+                        hierarchy_channel 6 uimsbf
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>hierarchy_descriptor</type>\n");
+            }
+            break;
+            case REGISTRATION_DESCRIPTOR:
+            {
+                /*
+                    registration_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        format_identifier 32 uimsbf
+                        for (i = 0; i < N; i++){
+                            additional_identification_info 8 bslbf
+                        }
+                    }
+                */
 
-            p += descriptor_length - 4;
+                uint32_t format_identifier = read_4_bytes(p); p += 4;
 
-            char sz_temp[5];
-            char *p = (char *) &format_identifier;
-            sz_temp[3] = *p++;
-            sz_temp[2] = *p++;
-            sz_temp[1] = *p++;
-            sz_temp[0] = *p;
-            sz_temp[4] = 0;
-            my_printf("        <type>registration_descriptor</type>\n");
-            my_printf("        <format_identifier>%s</format_identifier>\n", sz_temp);
-            //if (0 != scte35_format_identifier)
-            //    my_printf("        <scte35_format_identifier>0x%x</scte35_format_identifier>\n", scte35_format_identifier);
-        }
-        else if (DATA_STREAM_ALIGNMENT_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                data_stream_alignment_descriptor() {
+                if(0x43554549 == format_identifier)
+                    scte35_format_identifier = format_identifier; // Should be 0x43554549 (ASCII “CUEI”)
+
+                p += descriptor_length - 4;
+
+                char sz_temp[5];
+                char *p = (char *) &format_identifier;
+                sz_temp[3] = *p++;
+                sz_temp[2] = *p++;
+                sz_temp[1] = *p++;
+                sz_temp[0] = *p;
+                sz_temp[4] = 0;
+                my_printf("        <type>registration_descriptor</type>\n");
+                my_printf("        <format_identifier>%s</format_identifier>\n", sz_temp);
+                //if (0 != scte35_format_identifier)
+                //    my_printf("        <scte35_format_identifier>0x%x</scte35_format_identifier>\n", scte35_format_identifier);
+            }
+            break;
+            case DATA_STREAM_ALIGNMENT_DESCRIPTOR:
+            {
+                /*
+                    data_stream_alignment_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        alignment_type 8 uimsbf
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>data_stream_alignment_descriptor</type>\n");
+            }
+            break;
+            case TARGET_BACKGROUND_GRID_DESCRIPTOR:
+            {
+                /*
+                    target_background_grid_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        horizontal_size 14 uimsbf
+                        vertical_size 14 uimsbf
+                        aspect_ratio_information 4 uimsbf
+                    }            
+                */
+                p += descriptor_length;
+                my_printf("        <type>target_background_grid_descriptor</type>\n");
+            }
+            break;
+            case VIDEO_WINDOW_DESCRIPTOR:
+            {
+                /*
+                    video_window_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        horizontal_offset 14 uimsbf
+                        vertical_offset 14 uimsbf
+                        window_priority 4 uimsbf
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>video_window_descriptor</type>\n");
+            }
+            break;
+            case CA_DESCRIPTOR:
+            {
+                /*
+                    CA_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        CA_system_ID 16 uimsbf
+                        reserved 3 bslbf
+                        CA_PID 13 uimsbf
+                        for (i = 0; i < N; i++) {
+                            private_data_byte 8 uimsbf
+                        }
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>ca_descriptor</type>\n");
+            }
+            break;
+            case ISO_639_LANGUAGE_DESCRIPTOR:
+            {
+                /*
+                    ISO_639_language_descriptor() {
                     descriptor_tag 8 uimsbf
                     descriptor_length 8 uimsbf
-                    alignment_type 8 uimsbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>data_stream_alignment_descriptor</type>\n");
-        }
-        else if (TARGET_BACKGROUND_GRID_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                target_background_grid_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    horizontal_size 14 uimsbf
-                    vertical_size 14 uimsbf
-                    aspect_ratio_information 4 uimsbf
-                }            
-            */
-            p += descriptor_length;
-            my_printf("        <type>target_background_grid_descriptor</type>\n");
-        }
-        else if (VIDEO_WINDOW_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                video_window_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    horizontal_offset 14 uimsbf
-                    vertical_offset 14 uimsbf
-                    window_priority 4 uimsbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>video_window_descriptor</type>\n");
-        }
-        else if (CA_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                CA_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    CA_system_ID 16 uimsbf
-                    reserved 3 bslbf
-                    CA_PID 13 uimsbf
                     for (i = 0; i < N; i++) {
-                        private_data_byte 8 uimsbf
+                        ISO_639_language_code 24 bslbf
+                        audio_type 8 bslbf
                     }
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>ca_descriptor</type>\n");
-        }
-        else if (ISO_639_LANGUAGE_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                ISO_639_language_descriptor() {
-                descriptor_tag 8 uimsbf
-                descriptor_length 8 uimsbf
-                for (i = 0; i < N; i++) {
-                    ISO_639_language_code 24 bslbf
-                    audio_type 8 bslbf
-                }
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>iso_639_language_descriptor</type>\n");
-        }
-        else if (SYSTEM_CLOCK_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                system_clock_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    external_clock_reference_indicator 1 bslbf
-                    reserved 1 bslbf
-                    clock_accuracy_integer 6 uimsbf
-                    clock_accuracy_exponent 3 uimsbf
-                    reserved 5 bslbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>system_clock_descriptor</type>\n");
-        }
-        else if (MULTIPLEX_BUFFER_UTILIZATION_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                Multiplex_buffer_utilization_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    bound_valid_flag 1 bslbf
-                    LTW_offset_lower_bound 15 uimsbf
-                    reserved 1 bslbf
-                    LTW_offset_upper_bound 15 uimsbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>multiplex_buffer_utilization_descriptor</type>\n");
-        }
-        else if (COPYRIGHT_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                copyright_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    copyright_identifier 32 uimsbf
-                    for (i = 0; i < N; i++){
-                        additional_copyright_info 8 bslbf
                     }
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>copyright_descriptor</type>\n");
-        }
-        else if (MAXIMUM_BITRATE_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                maximum_bitrate_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    reserved 2 bslbf
-                    maximum_bitrate 22 uimsbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>maximum_bitrate_descriptor</type>\n");
-        }
-        else if (PRIVATE_DATA_INDICATOR_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                private_data_indicator_descriptor() {
-                    descriptor_tag 38 uimsbf
-                    descriptor_length 38 uimsbf
-                    private_data_indicator 32 uimsbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>private_data_indicator_descriptor</type>\n");
-        }
-        else if (SMOOTHING_BUFFER_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                smoothing_buffer_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    reserved 2 bslbf
-                    sb_leak_rate 22 uimsbf
-                    reserved 2 bslbf
-                    sb_size 22 uimsbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>smoothing_buffer_descriptor</type>\n");
-        }
-        else if (STD_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                STD_descriptor () {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    reserved 7 bslbf
-                    leak_valid_flag 1 bslbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>std_descriptor</type>\n");
-        }
-        else if (IBP_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                ibp_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    closed_gop_flag 1 uimsbf
-                    identical_gop_flag 1 uimsbf
-                    max_gop-length 14 uimsbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>ibp_descriptor</type>\n");
-        }
-        else if (MPEG_4_VIDEO_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                MPEG-4_video_descriptor () {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    MPEG-4_visual_profile_and_level 8 uimsbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>mpeg_4_video_descriptor</type>\n");
-        }
-        else if (MPEG_4_AUDIO_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                MPEG-4_audio_descriptor () {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    MPEG-4_audio_profile_and_level 8 uimsbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>mpeg_4_audio_descriptor</type>\n");
-        }
-        else if (IOD_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                IOD_descriptor () {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    Scope_of_IOD_label 8 uimsbf
-                    IOD_label 8 uimsbf
-                    InitialObjectDescriptor () 8 uimsbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>iod_descriptor</type>\n");
-        }
-        else if (SL_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                SL_descriptor () {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    ES_ID 16 uimsbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>sl_descriptor</type>\n");
-        }
-        else if (FMC_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                FMC_descriptor () {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    for (i = 0; i < descriptor_length; i + = 3) {
+                */
+                p += descriptor_length;
+                my_printf("        <type>iso_639_language_descriptor</type>\n");
+            }
+            break;
+            case SYSTEM_CLOCK_DESCRIPTOR:
+            {
+                /*
+                    system_clock_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        external_clock_reference_indicator 1 bslbf
+                        reserved 1 bslbf
+                        clock_accuracy_integer 6 uimsbf
+                        clock_accuracy_exponent 3 uimsbf
+                        reserved 5 bslbf
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>system_clock_descriptor</type>\n");
+            }
+            break;
+            case MULTIPLEX_BUFFER_UTILIZATION_DESCRIPTOR:
+            {
+                /*
+                    Multiplex_buffer_utilization_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        bound_valid_flag 1 bslbf
+                        LTW_offset_lower_bound 15 uimsbf
+                        reserved 1 bslbf
+                        LTW_offset_upper_bound 15 uimsbf
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>multiplex_buffer_utilization_descriptor</type>\n");
+            }
+            break;
+            case COPYRIGHT_DESCRIPTOR:
+            {
+                /*
+                    copyright_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        copyright_identifier 32 uimsbf
+                        for (i = 0; i < N; i++){
+                            additional_copyright_info 8 bslbf
+                        }
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>copyright_descriptor</type>\n");
+            }
+            break;
+            case MAXIMUM_BITRATE_DESCRIPTOR:
+            {
+                /*
+                    maximum_bitrate_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        reserved 2 bslbf
+                        maximum_bitrate 22 uimsbf
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>maximum_bitrate_descriptor</type>\n");
+            }
+            break;
+            case PRIVATE_DATA_INDICATOR_DESCRIPTOR:
+            {
+                /*
+                    private_data_indicator_descriptor() {
+                        descriptor_tag 38 uimsbf
+                        descriptor_length 38 uimsbf
+                        private_data_indicator 32 uimsbf
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>private_data_indicator_descriptor</type>\n");
+            }
+            break;
+            case SMOOTHING_BUFFER_DESCRIPTOR:
+            {
+                /*
+                    smoothing_buffer_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        reserved 2 bslbf
+                        sb_leak_rate 22 uimsbf
+                        reserved 2 bslbf
+                        sb_size 22 uimsbf
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>smoothing_buffer_descriptor</type>\n");
+            }
+            break;
+            case STD_DESCRIPTOR:
+            {
+                /*
+                    STD_descriptor () {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        reserved 7 bslbf
+                        leak_valid_flag 1 bslbf
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>std_descriptor</type>\n");
+            }
+            case IBP_DESCRIPTOR:
+            {
+                /*
+                    ibp_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        closed_gop_flag 1 uimsbf
+                        identical_gop_flag 1 uimsbf
+                        max_gop-length 14 uimsbf
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>ibp_descriptor</type>\n");
+            }
+            break;
+            case MPEG_4_VIDEO_DESCRIPTOR:
+            {
+                /*
+                    MPEG-4_video_descriptor () {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        MPEG-4_visual_profile_and_level 8 uimsbf
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>mpeg_4_video_descriptor</type>\n");
+            }
+            break;
+            case MPEG_4_AUDIO_DESCRIPTOR:
+            {
+                /*
+                    MPEG-4_audio_descriptor () {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        MPEG-4_audio_profile_and_level 8 uimsbf
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>mpeg_4_audio_descriptor</type>\n");
+            }
+            break;
+            case IOD_DESCRIPTOR:
+            {
+                /*
+                    IOD_descriptor () {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        Scope_of_IOD_label 8 uimsbf
+                        IOD_label 8 uimsbf
+                        InitialObjectDescriptor () 8 uimsbf
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>iod_descriptor</type>\n");
+            }
+            break;
+            case SL_DESCRIPTOR:
+            {
+                /*
+                    SL_descriptor () {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
                         ES_ID 16 uimsbf
-                        FlexMuxChannel 8 uimsbf
                     }
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>fmc_descriptor</type>\n");
-        }
-        else if (EXTERNAL_ES_ID_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                External_ES_ID_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    External_ES_ID 16 uimsbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>external_es_id_descriptor</type>\n");
-        }
-        else if (MUXCODE_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                Muxcode_descriptor() {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    for (i = 0; i < N; i++) {
-                        MuxCodeTableEntry ()
+                */
+                p += descriptor_length;
+                my_printf("        <type>sl_descriptor</type>\n");
+            }
+            break;
+            case FMC_DESCRIPTOR:
+            {
+                /*
+                    FMC_descriptor () {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        for (i = 0; i < descriptor_length; i + = 3) {
+                            ES_ID 16 uimsbf
+                            FlexMuxChannel 8 uimsbf
+                        }
                     }
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>muxcode_descriptor</type>\n");
-        }
-        else if (FMXBUFFERSIZE_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                FmxBufferSize_descriptor () {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    DefaultFlexMuxBufferDescriptor()
-                    for (i=0; i<descriptor_length; i += 4) {
-                        FlexMuxBufferDescriptor()
+                */
+                p += descriptor_length;
+                my_printf("        <type>fmc_descriptor</type>\n");
+            }
+            break;
+            case EXTERNAL_ES_ID_DESCRIPTOR:
+            {
+                /*
+                    External_ES_ID_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        External_ES_ID 16 uimsbf
                     }
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>fmxbuffersize_descriptor</type>\n");
+                */
+                p += descriptor_length;
+                my_printf("        <type>external_es_id_descriptor</type>\n");
+            }
+            break;
+            case MUXCODE_DESCRIPTOR:
+            {
+                /*
+                    Muxcode_descriptor() {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        for (i = 0; i < N; i++) {
+                            MuxCodeTableEntry ()
+                        }
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>muxcode_descriptor</type>\n");
+            }
+            break;
+            case FMXBUFFERSIZE_DESCRIPTOR:
+            {
+                /*
+                    FmxBufferSize_descriptor () {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        DefaultFlexMuxBufferDescriptor()
+                        for (i=0; i<descriptor_length; i += 4) {
+                            FlexMuxBufferDescriptor()
+                        }
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>fmxbuffersize_descriptor</type>\n");
+            }
+            break;
+            case MULTIPLEXBUFFER_DESCRIPTOR:
+            {
+                /*
+                    MultiplexBuffer_descriptor () {
+                        descriptor_tag 8 uimsbf
+                        descriptor_length 8 uimsbf
+                        MB_buffer_size 24 uimsbf
+                        TB_leak_rate 24 uimsbf
+                    }
+                */
+                p += descriptor_length;
+                my_printf("        <type>multiplexbuffer_descriptor</type>\n");
+            }
+            break;
+            default:
+                p += descriptor_length;
         }
-        else if (MULTIPLEXBUFFER_DESCRIPTOR == descriptor_tag)
-        {
-            /*
-                MultiplexBuffer_descriptor () {
-                    descriptor_tag 8 uimsbf
-                    descriptor_length 8 uimsbf
-                    MB_buffer_size 24 uimsbf
-                    TB_leak_rate 24 uimsbf
-                }
-            */
-            p += descriptor_length;
-            my_printf("        <type>multiplexbuffer_descriptor</type>\n");
-        }
-        else
-            p += descriptor_length;
 
         my_printf("      </descriptor>\n");
 
