@@ -1,4 +1,4 @@
-# mp2ts_parser_to_xml
+# mp2ts_parser
 
 (C) 2019, Mike Cancilla
 
