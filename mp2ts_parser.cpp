@@ -36,18 +36,12 @@ Value	StreamType	                        Value	StreamType
     http://www.scte.org/SCTEDocs/Standards/SCTE%2035%202016.pdf
 */
 
-#include "stdafx.h"
 #include <stdint.h>
 #include <assert.h>
+#include <stdarg.h>
 #include <map>
 
 #define READ_2_BYTES(p) *p | (*(p+1) << 8); p+=2;
-
-#define my_printf(...) \
-  { \
-    if(g_b_verbose) \
-      printf(__VA_ARGS__); \
-  }
 
 // Forward function definitions
 size_t read_descriptors(uint8_t *p, uint16_t program_info_length);
@@ -59,7 +53,7 @@ typedef std::map <uint16_t, char *> pid_map_type;
 // Global definitions
 stream_map_type g_stream_map;
 pid_map_type g_pid_map;
-bool g_b_verbose = false;
+bool g_b_xml = false;
 bool g_b_progress = false;
 int16_t g_program_number = -1;
 int16_t g_program_map_pid = -1;
@@ -97,6 +91,17 @@ int16_t g_scte32_pid = -1;
 #define MULTIPLEXBUFFER_DESCRIPTOR              ((uint8_t) 35)
 //#define 36 - 63 n / a n / a ITU - T Rec.H.222.0 | ISO / IEC 13818 - 1 Reserved
 //#define 64 - 255 n / a n / a User Private
+
+static void inline my_printf(const char *format, ...)
+{
+    if(g_b_xml)
+    {
+        va_list arg_list;
+        va_start(arg_list, format);
+        vprintf(format, arg_list);
+        va_end(arg_list);
+    }
+}
 
 // Initialize a map of ID to string type
 void init_stream_types()
@@ -186,19 +191,16 @@ int16_t read_pat(uint8_t *p)
     uint8_t section_number = *p++;
     uint8_t last_section_number = *p++;
 
-    if (g_b_verbose)
-    {
-        printf("    <program_association_table>\n");
-        printf("      <pointer_field>0x%x</pointer_field>\n", pointer_field);
-        printf("      <table_id>0x%x</table_id>\n", table_id);
-        printf("      <section_syntax_indicator>%d</section_syntax_indicator>\n", section_syntax_indicator);
-        printf("      <section_length>%d</section_length>\n", section_length);
-        printf("      <transport_stream_id>0x%x</transport_stream_id>\n", transport_stream_id);
-        printf("      <version_number>0x%x</version_number>\n", version_number);
-        printf("      <current_next_indicator>0x%x</current_next_indicator>\n", current_next_indicator);
-        printf("      <section_number>0x%x</section_number>\n", section_number);
-        printf("      <last_section_number>0x%x</last_section_number>\n", last_section_number);
-    }
+    my_printf("    <program_association_table>\n");
+    my_printf("      <pointer_field>0x%x</pointer_field>\n", pointer_field);
+    my_printf("      <table_id>0x%x</table_id>\n", table_id);
+    my_printf("      <section_syntax_indicator>%d</section_syntax_indicator>\n", section_syntax_indicator);
+    my_printf("      <section_length>%d</section_length>\n", section_length);
+    my_printf("      <transport_stream_id>0x%x</transport_stream_id>\n", transport_stream_id);
+    my_printf("      <version_number>0x%x</version_number>\n", version_number);
+    my_printf("      <current_next_indicator>0x%x</current_next_indicator>\n", current_next_indicator);
+    my_printf("      <section_number>0x%x</section_number>\n", section_number);
+    my_printf("      <last_section_number>0x%x</last_section_number>\n", last_section_number);
 
     while ((p - p_section_start) < (section_length - 4))
     {
@@ -216,24 +218,19 @@ int16_t read_pat(uint8_t *p)
             g_program_map_pid &= 0x1FFF;
         }
 
-        if (g_b_verbose)
-        {
-            printf("      <program>\n");
-            printf("        <number>%d</number>\n", g_program_number);
+        my_printf("      <program>\n");
+        my_printf("        <number>%d</number>\n", g_program_number);
 
-            if(network_pid)
-                printf("        <network_pid>0x%x</network_pid>\n", network_pid);
-            else
-                printf("        <program_map_pid>0x%x</program_map_pid>\n", g_program_map_pid);
+        if(network_pid)
+            my_printf("        <network_pid>0x%x</network_pid>\n", network_pid);
+        else
+            my_printf("        <program_map_pid>0x%x</program_map_pid>\n", g_program_map_pid);
 
-            printf("      </program>\n");
-        }
+        my_printf("      </program>\n");
     }
 
-    printf("    </program_association_table>\n");
+    my_printf("    </program_association_table>\n");
 
-    //my_printf("  Program Association Table:\n");
-    //my_printf("    program_number:%d, program_map_id:%x\n", g_program_number, g_program_map_pid);
     return 0;
 }
 
@@ -244,8 +241,6 @@ int16_t read_pat(uint8_t *p)
 // complete collection of all program definitions for a Transport Stream.
 int16_t read_pmt(uint8_t *p)
 {
-    //my_printf("  Program Map Table:\n");
-
     uint8_t pointer_field = *p++;
     uint8_t table_id = *p++;
     uint16_t section_length = read_2_bytes(p); p += 2;
@@ -271,21 +266,18 @@ int16_t read_pmt(uint8_t *p)
     uint16_t program_info_length = read_2_bytes(p); p += 2;
     program_info_length &= 0xFFF;
     
-    if (g_b_verbose)
-    {
-        printf("    <program_map_table>\n");
-        printf("      <pointer_field>%d</pointer_field>\n", pointer_field);
-        printf("      <table_id>0x%x</table_id>\n", table_id);
-        printf("      <section_syntax_indicator>%d</section_syntax_indicator>\n", section_length);
-        printf("      <section_length>%d</section_length>\n", section_length);
-        printf("      <program_number>%d</program_number>\n", program_number);
-        printf("      <version_number>%d</version_number>\n", version_number);
-        printf("      <current_next_indicator>%d</current_next_indicator>\n", current_next_indicator);
-        printf("      <section_number>%d</section_number>\n", section_number);
-        printf("      <last_section_number>%d</last_section_number>\n", last_section_number);
-        printf("      <pcr_pid>0x%x</pcr_pid>\n", pcr_pid);
-        printf("      <program_info_length>%d</program_info_length>\n", program_info_length);
-    }
+    my_printf("    <program_map_table>\n");
+    my_printf("      <pointer_field>%d</pointer_field>\n", pointer_field);
+    my_printf("      <table_id>0x%x</table_id>\n", table_id);
+    my_printf("      <section_syntax_indicator>%d</section_syntax_indicator>\n", section_length);
+    my_printf("      <section_length>%d</section_length>\n", section_length);
+    my_printf("      <program_number>%d</program_number>\n", program_number);
+    my_printf("      <version_number>%d</version_number>\n", version_number);
+    my_printf("      <current_next_indicator>%d</current_next_indicator>\n", current_next_indicator);
+    my_printf("      <section_number>%d</section_number>\n", section_number);
+    my_printf("      <last_section_number>%d</last_section_number>\n", last_section_number);
+    my_printf("      <pcr_pid>0x%x</pcr_pid>\n", pcr_pid);
+    my_printf("      <program_info_length>%d</program_info_length>\n", program_info_length);
 
     p += read_descriptors(p, program_info_length);
 
@@ -314,21 +306,17 @@ int16_t read_pmt(uint8_t *p)
 
         //my_printf("        %d) pid:%x, stream_type:%x (%s)\n", stream_count++, elementary_pid, stream_type, g_stream_map[stream_type]);
 
-        if (g_b_verbose)
-        {
-            printf("      <stream>\n");
-            printf("        <number>%zd</number>\n", stream_count);
-            printf("        <pid>0x%x</pid>\n", elementary_pid);
-            printf("        <type_number>0x%x</type_number>\n", stream_type);
-            printf("        <type_name>%s</type_name>\n", g_stream_map[stream_type]);
-            printf("      </stream>\n");
-        }
+        my_printf("      <stream>\n");
+        my_printf("        <number>%zd</number>\n", stream_count);
+        my_printf("        <pid>0x%x</pid>\n", elementary_pid);
+        my_printf("        <type_number>0x%x</type_number>\n", stream_type);
+        my_printf("        <type_name>%s</type_name>\n", g_stream_map[stream_type]);
+        my_printf("      </stream>\n");
 
         stream_count++;
     }
 
-    if (g_b_verbose)
-        printf("    </program_map_table>\n");
+    my_printf("    </program_map_table>\n");
 
     return 0;
 }
@@ -349,43 +337,37 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
         uint8_t descriptor_tag = *p++;
         descriptor_length = *p++;
 
-        if (g_b_verbose)
-        {
-            printf("      <descriptor>\n");
-            printf("        <number>%d</number>\n", descriptor_number);
-            printf("        <tag>%d</tag>\n", descriptor_tag);
-            printf("        <length>%d</length>\n", descriptor_length);
-        }
+        my_printf("      <descriptor>\n");
+        my_printf("        <number>%d</number>\n", descriptor_number);
+        my_printf("        <tag>%d</tag>\n", descriptor_tag);
+        my_printf("        <length>%d</length>\n", descriptor_length);
 
         if (VIDEO_STREAM_DESCRIPTOR == descriptor_tag)
         {
-            if (g_b_verbose)
+            uint8_t multiple_frame_rate_flag = *p++;
+            uint8_t frame_rate_code = (multiple_frame_rate_flag & 0x78) >> 3;
+            uint8_t mpeg_1_only_flag = (multiple_frame_rate_flag & 0x04) >> 2;
+            uint8_t constrained_parameter_flag = (multiple_frame_rate_flag & 0x02) >> 1;
+            uint8_t still_picture_flag = (multiple_frame_rate_flag & 0x01);
+            multiple_frame_rate_flag >>= 7;
+
+            my_printf("        <type>video_stream_descriptor</type>\n");
+            my_printf("        <multiple_frame_rate_flag>%d</multiple_frame_rate_flag>\n", multiple_frame_rate_flag);
+            my_printf("        <frame_rate_code>0x%x</frame_rate_code>\n", frame_rate_code);
+            my_printf("        <mpeg_1_only_flag>%d</mpeg_1_only_flag>\n", mpeg_1_only_flag);
+            my_printf("        <constrained_parameter_flag>%d</constrained_parameter_flag>\n", constrained_parameter_flag);
+            my_printf("        <still_picture_flag>%d</still_picture_flag>\n", still_picture_flag);
+
+            if (!mpeg_1_only_flag)
             {
-                uint8_t multiple_frame_rate_flag = *p++;
-                uint8_t frame_rate_code = (multiple_frame_rate_flag & 0x78) >> 3;
-                uint8_t mpeg_1_only_flag = (multiple_frame_rate_flag & 0x04) >> 2;
-                uint8_t constrained_parameter_flag = (multiple_frame_rate_flag & 0x02) >> 1;
-                uint8_t still_picture_flag = (multiple_frame_rate_flag & 0x01);
-                multiple_frame_rate_flag >>= 7;
-
-                printf("        <type>video_stream_descriptor</type>\n");
-                printf("        <multiple_frame_rate_flag>%d</multiple_frame_rate_flag>\n", multiple_frame_rate_flag);
-                printf("        <frame_rate_code>0x%x</frame_rate_code>\n", frame_rate_code);
-                printf("        <mpeg_1_only_flag>%d</mpeg_1_only_flag>\n", mpeg_1_only_flag);
-                printf("        <constrained_parameter_flag>%d</constrained_parameter_flag>\n", constrained_parameter_flag);
-                printf("        <still_picture_flag>%d</still_picture_flag>\n", still_picture_flag);
-
-                if (!mpeg_1_only_flag)
-                {
-                    uint8_t profile_and_level_indication = *p++;
-                    uint8_t chroma_format = *p++;
-                    uint8_t frame_rate_extension_flag = (chroma_format & 0x10) >> 4;
-                    chroma_format >>= 6;
+                uint8_t profile_and_level_indication = *p++;
+                uint8_t chroma_format = *p++;
+                uint8_t frame_rate_extension_flag = (chroma_format & 0x10) >> 4;
+                chroma_format >>= 6;
                     
-                    printf("        <profile_and_level_indication>0x%x</profile_and_level_indication>\n", profile_and_level_indication);
-                    printf("        <chroma_format>%d</chroma_format>\n", chroma_format);
-                    printf("        <frame_rate_extension_flag>%d</frame_rate_extension_flag>\n", frame_rate_extension_flag);
-                }
+                my_printf("        <profile_and_level_indication>0x%x</profile_and_level_indication>\n", profile_and_level_indication);
+                my_printf("        <chroma_format>%d</chroma_format>\n", chroma_format);
+                my_printf("        <frame_rate_extension_flag>%d</frame_rate_extension_flag>\n", frame_rate_extension_flag);
             }
         }
         else if (AUDIO_STREAM_DESCRIPTOR == descriptor_tag)
@@ -395,14 +377,11 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
             uint8_t layer = (free_format_flag & 0x30) >> 4;
             uint8_t variable_rate_audio_indicator = (free_format_flag & 0x08) >> 3;
 
-            if (g_b_verbose)
-            {
-                printf("        <type>audio_stream_descriptor</type>\n");
-                printf("        <free_format_flag>%d</free_format_flag>\n", free_format_flag);
-                printf("        <id>%d</id>\n", id);
-                printf("        <layer>%d</layer>\n", layer);
-                printf("        <variable_rate_audio_indicator>%d</variable_rate_audio_indicator>\n", variable_rate_audio_indicator);
-            }
+            my_printf("        <type>audio_stream_descriptor</type>\n");
+            my_printf("        <free_format_flag>%d</free_format_flag>\n", free_format_flag);
+            my_printf("        <id>%d</id>\n", id);
+            my_printf("        <layer>%d</layer>\n", layer);
+            my_printf("        <variable_rate_audio_indicator>%d</variable_rate_audio_indicator>\n", variable_rate_audio_indicator);
         }
         else if(REGISTRATION_DESCRIPTOR == descriptor_tag)
         {
@@ -413,28 +392,22 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
 
             p += descriptor_length - 4;
 
-            if (g_b_verbose)
-            {
-                char sz_temp[5];
-                char *p = (char *) &format_identifier;
-                sz_temp[3] = *p++;
-                sz_temp[2] = *p++;
-                sz_temp[1] = *p++;
-                sz_temp[0] = *p;
-                sz_temp[4] = 0;
-                printf("        <type>registration_descriptor</type>\n");
-                printf("        <format_identifier>%s</format_identifier>\n", sz_temp);
-                //if (0 != scte35_format_identifier)
-                //    printf("        <scte35_format_identifier>0x%x</scte35_format_identifier>\n", scte35_format_identifier);
-            }
+            char sz_temp[5];
+            char *p = (char *) &format_identifier;
+            sz_temp[3] = *p++;
+            sz_temp[2] = *p++;
+            sz_temp[1] = *p++;
+            sz_temp[0] = *p;
+            sz_temp[4] = 0;
+            my_printf("        <type>registration_descriptor</type>\n");
+            my_printf("        <format_identifier>%s</format_identifier>\n", sz_temp);
+            //if (0 != scte35_format_identifier)
+            //    my_printf("        <scte35_format_identifier>0x%x</scte35_format_identifier>\n", scte35_format_identifier);
         }
         else
             p += descriptor_length;
 
-        if (g_b_verbose)
-        {
-            printf("      </descriptor>\n");
-        }
+        my_printf("      </descriptor>\n");
 
         descriptor_number++;
     }
@@ -451,11 +424,10 @@ int16_t process_pid(uint16_t pid, uint8_t *p)
         read_pmt(p);
     else
     {
+        // Here, p is pointing at actual data, like video or audio.
+        // For now just print the data's type.
         char *type_string = g_pid_map[pid];
-        //assert(NULL != type_string);
-        //my_printf("  PID:%x, (%s)\n", pid, type_string);
-        if (g_b_verbose)
-            printf("    <type_name>%s</type_name>\n", g_pid_map[pid]);
+        my_printf("    <type_name>%s</type_name>\n", g_pid_map[pid]);
     }
 
     return 0;
@@ -467,17 +439,14 @@ int16_t process_packet(uint8_t *packet, size_t packet_num)
     uint8_t *p = NULL;
     int16_t ret = -1;
 
-    if (g_b_verbose)
-    {
-        printf("  <packet>\n");
-        printf("    <number>%zd</number>\n", packet_num);
-    }
+    my_printf("  <packet>\n");
+    my_printf("    <number>%zd</number>\n", packet_num);
 
     p = packet;
 
     if (0x47 != *p)
     {
-        printf("    <error>Packet %zd does not start with 0x47</error>\n", packet_num);
+        my_printf("    <error>Packet %zd does not start with 0x47</error>\n", packet_num);
         fprintf(stderr, "Error: Packet %zd does not start with 0x47\n", packet_num);
         goto process_packet_error;
     }
@@ -502,23 +471,19 @@ int16_t process_packet(uint8_t *packet, size_t packet_num)
         0x3 == adaptation_field_control)
         assert(1);
 
-    if (g_b_verbose)
-    {
-        printf("    <pid>0x%x</pid>\n", PID);
-        printf("    <transport_error_indicator>0x%x</transport_error_indicator>\n", transport_error_indicator);
-        printf("    <payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payload_unit_start_indicator);
-        printf("    <transport_priority>0x%x</transport_priority>\n", transport_priority);
-        printf("    <transport_scrambling_control>0x%x</transport_scrambling_control>\n", transport_scrambling_control);
-        printf("    <adaptation_field_control>0x%x</adaptation_field_control>\n", adaptation_field_control);
-        printf("    <continuity_counter>0x%x</continuity_counter>\n", continuity_counter);
-    }
+    my_printf("    <pid>0x%x</pid>\n", PID);
+    my_printf("    <transport_error_indicator>0x%x</transport_error_indicator>\n", transport_error_indicator);
+    my_printf("    <payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payload_unit_start_indicator);
+    my_printf("    <transport_priority>0x%x</transport_priority>\n", transport_priority);
+    my_printf("    <transport_scrambling_control>0x%x</transport_scrambling_control>\n", transport_scrambling_control);
+    my_printf("    <adaptation_field_control>0x%x</adaptation_field_control>\n", adaptation_field_control);
+    my_printf("    <continuity_counter>0x%x</continuity_counter>\n", continuity_counter);
 
     ret = process_pid(PID, p);
 
 process_packet_error:
 
-    if (g_b_verbose)
-        printf("  </packet>\n");
+    my_printf("  </packet>\n");
 
     return ret;
 }
@@ -536,24 +501,25 @@ int main(int argc, char* argv[])
 
     if (0 == argc)
     {
-        fprintf(stderr, "Usage: %s [-v] [-p] mp2ts_file\n", argv[0]);
-        fprintf(stderr, "-v: Output extensive xml representation of MP2TS file to stdout\n");
+        fprintf(stderr, "Usage: %s [-x] [-p] mp2ts_file\n", argv[0]);
+        fprintf(stderr, "-x: Output extensive xml representation of MP2TS file to stdout\n");
         fprintf(stderr, "-p: Print progress on a single line to stderr\n");
         return 0;
     }
 
     for (int i = 0; i < argc - 1; i++)
     {
-        if(0 == strcmp("-v", argv[i]))
-            g_b_verbose = true;
+        if(0 == strcmp("-x", argv[i]))
+            g_b_xml = true;
 
         if (0 == strcmp("-p", argv[i]))
             g_b_progress = true;
     }
 
-	FILE *f = fopen(argv[argc - 1], "rb");
+	FILE *f = nullptr;
+	fopen_s(&f, argv[argc - 1], "rb");
 
-	if (NULL == f)
+	if (nullptr == f)
     {
         fprintf(stderr, "%s: Can't open input file", argv[0]);
 		return -1;
@@ -604,13 +570,10 @@ int main(int argc, char* argv[])
 	packet_buffer_size = fread(packet_buffer, 1, read_block_size, f);
     packet = packet_buffer;
 
-    if(g_b_verbose)
-    {
-        printf("<?xml version = \"1.0\" encoding = \"UTF-8\"?>\n");
-        printf("<file>\n");
-        printf("  <name>%s</name>\n", argv[argc - 1]);
-        printf("  <packet_size>%d</packet_size>\n", packet_size);
-    }
+    my_printf("<?xml version = \"1.0\" encoding = \"UTF-8\"?>\n");
+    my_printf("<file>\n");
+    my_printf("  <name>%s</name>\n", argv[argc - 1]);
+    my_printf("  <packet_size>%d</packet_size>\n", packet_size);
 
 	while((size_t) (packet - packet_buffer) < packet_buffer_size)
 	{
@@ -642,8 +605,7 @@ int main(int argc, char* argv[])
         packet_num++;
     }
 
-    if (g_b_verbose)
-        printf("</file>\n");
+    my_printf("</file>\n");
 
     delete packet_buffer;
 
