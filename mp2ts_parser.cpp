@@ -36,10 +36,17 @@ Value	StreamType	                        Value	StreamType
     http://www.scte.org/SCTEDocs/Standards/SCTE%2035%202016.pdf
 */
 
-#include <stdint.h>
-#include <assert.h>
-#include <stdarg.h>
+#include <cstdint>
+#include <cassert>
+#include <cstdarg>
+#include <vector>
 #include <map>
+
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+
+#include "imgui.h"
+#include "imgui_impl_glfw_gl3.h"
 
 #define READ_2_BYTES(p) *p | (*(p+1) << 8); p+=2;
 
@@ -47,17 +54,41 @@ Value	StreamType	                        Value	StreamType
 size_t read_descriptors(uint8_t *p, uint16_t program_info_length);
 
 // Type definitions
-typedef std::map <uint16_t, char *> stream_map_type;
-typedef std::map <uint16_t, char *> pid_map_type;
+struct pid_entry_type
+{
+    std::string pid_name;
+    size_t pid_byte_location;
+
+    pid_entry_type(std::string pid_name, size_t pid_byte_location)
+        : pid_name(pid_name)
+        , pid_byte_location(pid_byte_location)
+    {
+    }
+};
+
+typedef std::map <uint16_t, char *> stream_map_type; // ID, Name
+typedef std::map <uint16_t, char *> pid_map_type; // ID, Name
+
+typedef std::vector<pid_entry_type> pid_list_type;
 
 // Global definitions
 stream_map_type g_stream_map;
 pid_map_type g_pid_map;
+pid_list_type g_pid_list;
+
 bool g_b_xml = false;
 bool g_b_progress = false;
+bool g_b_gui = false;
+
 int16_t g_program_number = -1;
 int16_t g_program_map_pid = -1;
 int16_t g_scte32_pid = -1;
+size_t g_ptr_position = 0;
+
+GLFWwindow* g_window = NULL;
+
+#define WINDOW_WIDTH 1200
+#define WINDOW_HEIGHT 600
 
 // Program and program element descriptors
 //#define 0 n / a n / a Reserved
@@ -92,7 +123,7 @@ int16_t g_scte32_pid = -1;
 //#define 36 - 63 n / a n / a ITU - T Rec.H.222.0 | ISO / IEC 13818 - 1 Reserved
 //#define 64 - 255 n / a n / a User Private
 
-static void inline my_printf(const char *format, ...)
+void inline my_printf(const char *format, ...)
 {
     if(g_b_xml)
     {
@@ -101,6 +132,12 @@ static void inline my_printf(const char *format, ...)
         vprintf(format, arg_list);
         va_end(arg_list);
     }
+}
+
+void inline inc_ptr(uint8_t *&p, int bytes)
+{
+    p += bytes;
+    g_ptr_position += bytes;
 }
 
 // Initialize a map of ID to string type
@@ -174,22 +211,29 @@ inline uint32_t read_4_bytes(uint8_t *p)
 // a program.
 int16_t read_pat(uint8_t *p)
 {
-    uint8_t pointer_field = *p++; // Spec 2.4.4.1
-    uint8_t table_id = *p++;
-    uint16_t section_length = read_2_bytes(p); p += 2;
+    uint8_t pointer_field = *p; // Spec 2.4.4.1
+    inc_ptr(p, 1);
+    uint8_t table_id = *p;
+    inc_ptr(p, 1);
+    uint16_t section_length = read_2_bytes(p);
+    inc_ptr(p, 2);
     uint8_t section_syntax_indicator = (0x8000 & section_length) >> 15;
     section_length &= 0xFFF;
 
     uint8_t *p_section_start = p;
 
-    uint16_t transport_stream_id = read_2_bytes(p); p += 2;
+    uint16_t transport_stream_id = read_2_bytes(p);
+    inc_ptr(p, 2);
 
-    uint8_t current_next_indicator = *p++;
+    uint8_t current_next_indicator = *p;
+    inc_ptr(p, 1);
     uint8_t version_number = (current_next_indicator & 0x3E) >> 1;
     current_next_indicator &= 0x1;
 
-    uint8_t section_number = *p++;
-    uint8_t last_section_number = *p++;
+    uint8_t section_number = *p;
+    inc_ptr(p, 1);
+    uint8_t last_section_number = *p;
+    inc_ptr(p, 1);
 
     my_printf("    <program_association_table>\n");
     my_printf("      <pointer_field>0x%x</pointer_field>\n", pointer_field);
@@ -204,17 +248,20 @@ int16_t read_pat(uint8_t *p)
 
     while ((p - p_section_start) < (section_length - 4))
     {
-        g_program_number = read_2_bytes(p); p += 2;
+        g_program_number = read_2_bytes(p);
+        inc_ptr(p, 2);
         uint16_t network_pid = 0;
 
         if (0 == g_program_number)
         {
-            network_pid = read_2_bytes(p); p += 2;
+            network_pid = read_2_bytes(p);
+            inc_ptr(p, 2);
             network_pid &= 0x1FFF;
         }
         else
         {
-            g_program_map_pid = read_2_bytes(p); p += 2;
+            g_program_map_pid = read_2_bytes(p);
+            inc_ptr(p, 2);
             g_program_map_pid &= 0x1FFF;
         }
 
@@ -241,29 +288,39 @@ int16_t read_pat(uint8_t *p)
 // complete collection of all program definitions for a Transport Stream.
 int16_t read_pmt(uint8_t *p)
 {
-    uint8_t pointer_field = *p++;
-    uint8_t table_id = *p++;
-    uint16_t section_length = read_2_bytes(p); p += 2;
+    uint8_t pointer_field = *p;
+    inc_ptr(p, 1);
+    uint8_t table_id = *p;
+    inc_ptr(p, 1);
+    uint16_t section_length = read_2_bytes(p);
+    inc_ptr(p, 2);
     uint8_t section_syntax_indicator = section_length & 0x80 >> 15;
     section_length &= 0xFFF;
 
     uint8_t *p_section_start = p;
 
-    uint16_t program_number = read_2_bytes(p); p += 2;
+    uint16_t program_number = read_2_bytes(p);
+    inc_ptr(p, 2);
 
-    uint8_t current_next_indicator = *p++;
+    uint8_t current_next_indicator = *p;
+    inc_ptr(p, 1);
     uint8_t version_number = (current_next_indicator & 0x3E) >> 1;
     current_next_indicator &= 0x1;
 
-    uint8_t section_number = *p++;
-    uint8_t last_section_number = *p++;
+    uint8_t section_number = *p;
+    inc_ptr(p, 1);
+    uint8_t last_section_number = *p;
+    inc_ptr(p, 1);
 
-    uint16_t pcr_pid = read_2_bytes(p); p += 2;
+    uint16_t pcr_pid = read_2_bytes(p);
+    inc_ptr(p, 2);
     pcr_pid &= 0x1FFF;
 
     g_pid_map[pcr_pid] = "PCR";
 
-    uint16_t program_info_length = read_2_bytes(p); p += 2;
+    uint16_t program_info_length = read_2_bytes(p);
+    inc_ptr(p, 2);
+
     program_info_length &= 0xFFF;
     
     my_printf("    <program_map_table>\n");
@@ -289,11 +346,14 @@ int16_t read_pmt(uint8_t *p)
     // Subtract 4 from section_length to account for 4 byte CRC at its end.  The CRC is not program data.
     while((p - p_section_start) < (section_length - 4))
     {
-        uint8_t stream_type = *p++;
-        uint16_t elementary_pid = read_2_bytes(p); p+=2;
+        uint8_t stream_type = *p;
+        inc_ptr(p, 1);
+        uint16_t elementary_pid = read_2_bytes(p);
+        inc_ptr(p, 2);
         elementary_pid &= 0x1FFF;
 
-        uint16_t es_info_length = read_2_bytes(p); p += 2;
+        uint16_t es_info_length = read_2_bytes(p);
+        inc_ptr(p, 2);
         es_info_length &= 0xFFF;
 
         p += es_info_length;
@@ -334,8 +394,10 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
 
     while(p - p_descriptor_start < program_info_length)
     {
-        uint8_t descriptor_tag = *p++;
-        descriptor_length = *p++;
+        uint8_t descriptor_tag = *p;
+        inc_ptr(p, 1);
+        descriptor_length = *p;
+        inc_ptr(p, 1);
 
         my_printf("      <descriptor>\n");
         my_printf("        <number>%d</number>\n", descriptor_number);
@@ -364,7 +426,8 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                     }
                 */
 
-                uint8_t multiple_frame_rate_flag = *p++;
+                uint8_t multiple_frame_rate_flag = *p;
+                inc_ptr(p, 1);
                 uint8_t frame_rate_code = (multiple_frame_rate_flag & 0x78) >> 3;
                 uint8_t mpeg_1_only_flag = (multiple_frame_rate_flag & 0x04) >> 2;
                 uint8_t constrained_parameter_flag = (multiple_frame_rate_flag & 0x02) >> 1;
@@ -380,8 +443,10 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
 
                 if (!mpeg_1_only_flag)
                 {
-                    uint8_t profile_and_level_indication = *p++;
-                    uint8_t chroma_format = *p++;
+                    uint8_t profile_and_level_indication = *p;
+                    inc_ptr(p, 1);
+                    uint8_t chroma_format = *p;
+                    inc_ptr(p, 1);
                     uint8_t frame_rate_extension_flag = (chroma_format & 0x10) >> 4;
                     chroma_format >>= 6;
                     
@@ -405,7 +470,8 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                     }
                 */
 
-                uint8_t free_format_flag = *p++;
+                uint8_t free_format_flag = *p;
+                inc_ptr(p, 1);
                 uint8_t id = (free_format_flag & 0x40) >> 6;
                 uint8_t layer = (free_format_flag & 0x30) >> 4;
                 uint8_t variable_rate_audio_indicator = (free_format_flag & 0x08) >> 3;
@@ -433,7 +499,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         hierarchy_channel 6 uimsbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>hierarchy_descriptor</type>\n");
             }
             break;
@@ -450,19 +516,20 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                     }
                 */
 
-                uint32_t format_identifier = read_4_bytes(p); p += 4;
+                uint32_t format_identifier = read_4_bytes(p);
+                inc_ptr(p, 4);
 
                 if(0x43554549 == format_identifier)
                     scte35_format_identifier = format_identifier; // Should be 0x43554549 (ASCII “CUEI”)
 
-                p += descriptor_length - 4;
+                inc_ptr(p, descriptor_length - 4);
 
                 char sz_temp[5];
-                char *p = (char *) &format_identifier;
-                sz_temp[3] = *p++;
-                sz_temp[2] = *p++;
-                sz_temp[1] = *p++;
-                sz_temp[0] = *p;
+                char *pChar = (char *) &format_identifier;
+                sz_temp[3] = *pChar++;
+                sz_temp[2] = *pChar++;
+                sz_temp[1] = *pChar++;
+                sz_temp[0] = *pChar;
                 sz_temp[4] = 0;
                 my_printf("        <type>registration_descriptor</type>\n");
                 my_printf("        <format_identifier>%s</format_identifier>\n", sz_temp);
@@ -479,7 +546,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         alignment_type 8 uimsbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>data_stream_alignment_descriptor</type>\n");
             }
             break;
@@ -494,7 +561,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         aspect_ratio_information 4 uimsbf
                     }            
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>target_background_grid_descriptor</type>\n");
             }
             break;
@@ -509,7 +576,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         window_priority 4 uimsbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>video_window_descriptor</type>\n");
             }
             break;
@@ -527,7 +594,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         }
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>ca_descriptor</type>\n");
             }
             break;
@@ -543,7 +610,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                     }
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>iso_639_language_descriptor</type>\n");
             }
             break;
@@ -560,7 +627,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         reserved 5 bslbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>system_clock_descriptor</type>\n");
             }
             break;
@@ -576,7 +643,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         LTW_offset_upper_bound 15 uimsbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>multiplex_buffer_utilization_descriptor</type>\n");
             }
             break;
@@ -592,7 +659,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         }
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>copyright_descriptor</type>\n");
             }
             break;
@@ -606,7 +673,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         maximum_bitrate 22 uimsbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>maximum_bitrate_descriptor</type>\n");
             }
             break;
@@ -619,7 +686,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         private_data_indicator 32 uimsbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>private_data_indicator_descriptor</type>\n");
             }
             break;
@@ -635,7 +702,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         sb_size 22 uimsbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>smoothing_buffer_descriptor</type>\n");
             }
             break;
@@ -649,7 +716,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         leak_valid_flag 1 bslbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>std_descriptor</type>\n");
             }
             case IBP_DESCRIPTOR:
@@ -663,7 +730,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         max_gop-length 14 uimsbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>ibp_descriptor</type>\n");
             }
             break;
@@ -676,7 +743,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         MPEG-4_visual_profile_and_level 8 uimsbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>mpeg_4_video_descriptor</type>\n");
             }
             break;
@@ -689,7 +756,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         MPEG-4_audio_profile_and_level 8 uimsbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>mpeg_4_audio_descriptor</type>\n");
             }
             break;
@@ -704,7 +771,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         InitialObjectDescriptor () 8 uimsbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>iod_descriptor</type>\n");
             }
             break;
@@ -717,7 +784,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         ES_ID 16 uimsbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>sl_descriptor</type>\n");
             }
             break;
@@ -733,7 +800,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         }
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>fmc_descriptor</type>\n");
             }
             break;
@@ -746,7 +813,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         External_ES_ID 16 uimsbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>external_es_id_descriptor</type>\n");
             }
             break;
@@ -761,7 +828,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         }
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>muxcode_descriptor</type>\n");
             }
             break;
@@ -777,7 +844,7 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         }
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>fmxbuffersize_descriptor</type>\n");
             }
             break;
@@ -791,12 +858,12 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
                         TB_leak_rate 24 uimsbf
                     }
                 */
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
                 my_printf("        <type>multiplexbuffer_descriptor</type>\n");
             }
             break;
             default:
-                p += descriptor_length;
+                inc_ptr(p, descriptor_length);
         }
 
         my_printf("      </descriptor>\n");
@@ -820,6 +887,19 @@ int16_t process_pid(uint16_t pid, uint8_t *p)
         // For now just print the data's type.
         char *type_string = g_pid_map[pid];
         my_printf("    <type_name>%s</type_name>\n", g_pid_map[pid]);
+
+        if(g_b_gui)
+        {
+            static uint16_t last_pid = 0;
+
+            if(last_pid != pid)
+            {
+                pid_entry_type p(g_pid_map[pid], pid);
+                g_pid_list.push_back(p);
+            }
+
+            last_pid = pid;
+        }
     }
 
     return 0;
@@ -844,9 +924,11 @@ int16_t process_packet(uint8_t *packet, size_t packet_num)
     }
 
     // Skip the sync byte 0x47
-    p++;
+    inc_ptr(p, 1);
 
-    uint16_t PID = read_2_bytes(p); p += 2;
+    uint16_t PID = read_2_bytes(p);
+    inc_ptr(p, 2);
+
     uint8_t transport_error_indicator = (PID & 0x8000) >> 15;
     uint8_t payload_unit_start_indicator = (PID & 0x4000) >> 14;
     uint8_t transport_priority = (PID & 0x2000) >> 13;
@@ -854,7 +936,9 @@ int16_t process_packet(uint8_t *packet, size_t packet_num)
     PID &= 0x1FFF;
 
     // Move beyond the 32 bit header
-    uint8_t final_byte = *p++;
+    uint8_t final_byte = *p;
+    inc_ptr(p, 1);
+
     uint8_t transport_scrambling_control = (final_byte & 0xC0) >> 6;
     uint8_t adaptation_field_control = (final_byte & 0x30) >> 4;
     uint8_t continuity_counter = (final_byte & 0x0F) >> 4;
@@ -883,14 +967,6 @@ process_packet_error:
 // It all starts here
 int main(int argc, char* argv[])
 {
-	uint8_t *packet_buffer, *packet;
-	uint16_t program_map_pid = 0;
-    size_t packet_num = 0;
-
-	size_t packet_buffer_size = 0;
-    size_t total_read = 0;
-    size_t read_block_size = 0;
-
     if (0 == argc)
     {
         fprintf(stderr, "Usage: %s [-x] [-p] mp2ts_file\n", argv[0]);
@@ -901,12 +977,65 @@ int main(int argc, char* argv[])
 
     for (int i = 0; i < argc - 1; i++)
     {
-        if(0 == strcmp("-x", argv[i]))
-            g_b_xml = true;
+        if (0 == strcmp("-g", argv[i]))
+            g_b_gui = true;
 
         if (0 == strcmp("-p", argv[i]))
             g_b_progress = true;
+
+        if(0 == strcmp("-x", argv[i]))
+            g_b_xml = true;
     }
+
+    if(g_b_gui)
+    {
+        unsigned int err = GLFW_NO_ERROR;
+
+        /* Initialize the library */
+        if(!glfwInit())
+            return -1;
+
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+        /* Create a windowed mode window and its OpenGL context */
+        g_window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Mpeg2-TS Parser GUI", NULL, NULL);
+        if (!g_window)
+        {
+            fprintf(stderr, "Could not create GL window! Continuing without a GUI!\n");
+            glfwTerminate();
+            g_b_gui = false;
+            goto GUI_ERROR;
+        }
+
+        /* Make the window's context current */
+        glfwMakeContextCurrent(g_window);
+
+        glfwSwapInterval(1);
+
+        if(glewInit() != GLEW_OK)
+        {
+            fprintf(stderr, "Glew Initialization Error! Continuing without a GUI!\n");
+            glfwTerminate();
+            g_b_gui = false;
+            goto GUI_ERROR;
+        }
+
+		ImGui::CreateContext();
+		ImGui_ImplGlfwGL3_Init(g_window, true);
+		ImGui::StyleColorsDark();
+    }
+
+GUI_ERROR:
+
+    uint8_t *packet_buffer, *packet;
+	uint16_t program_map_pid = 0;
+    size_t packet_num = 0;
+
+	size_t packet_buffer_size = 0;
+    size_t total_read = 0;
+    size_t read_block_size = 0;
 
 	FILE *f = nullptr;
 	fopen_s(&f, argv[argc - 1], "rb");
@@ -980,6 +1109,7 @@ int main(int argc, char* argv[])
             return err;
 
         total_read += packet_size;
+        g_ptr_position = total_read;
 
         if(g_b_progress)
             fprintf(stderr, "  total_read:%zd, %2.2f%%\r", total_read, ((double)total_read / (double)file_size) * 100.);
@@ -995,6 +1125,40 @@ int main(int argc, char* argv[])
         assert(packet_buffer_size > 0);
 
         packet_num++;
+
+        if(g_b_gui)
+        {
+            if(!glfwWindowShouldClose(g_window))
+            {
+			    glClearColor(0.f, 0.f, 0.f, 1.f);
+
+			    ImGui_ImplGlfwGL3_NewFrame();
+                /*
+                if (currentTest)
+			    {
+				    currentTest->OnUpdate(0.f);
+				    currentTest->OnRender();
+				    ImGui::Begin("Test");
+				    if (currentTest != testMenu && ImGui::Button("<-"))
+				    {
+					    delete currentTest;
+					    currentTest = testMenu;
+				    }
+				    currentTest->OnImGuiRender();
+				    ImGui::End();
+			    }
+                */
+
+			    ImGui::Render();
+			    ImGui_ImplGlfwGL3_RenderDrawData(ImGui::GetDrawData());
+
+                /* Swap front and back buffers */
+                glfwSwapBuffers(g_window);
+
+                /* Poll for and process events */
+                glfwPollEvents();
+            }
+        }
     }
 
     my_printf("</file>\n");
@@ -1002,6 +1166,44 @@ int main(int argc, char* argv[])
     delete packet_buffer;
 
 	fclose(f);
+
+    if(g_b_gui)
+    {
+        while(!glfwWindowShouldClose(g_window))
+        {
+			glClearColor(0.f, 0.f, 0.f, 1.f);
+
+			ImGui_ImplGlfwGL3_NewFrame();
+/*
+            if (currentTest)
+			{
+				currentTest->OnUpdate(0.f);
+				currentTest->OnRender();
+				ImGui::Begin("Test");
+				if (currentTest != testMenu && ImGui::Button("<-"))
+				{
+					delete currentTest;
+					currentTest = testMenu;
+				}
+				currentTest->OnImGuiRender();
+				ImGui::End();
+			}
+*/
+
+			ImGui::Render();
+			ImGui_ImplGlfwGL3_RenderDrawData(ImGui::GetDrawData());
+
+            /* Swap front and back buffers */
+            glfwSwapBuffers(g_window);
+
+            /* Poll for and process events */
+            glfwPollEvents();
+        }
+
+        ImGui_ImplGlfwGL3_Shutdown();
+	    ImGui::DestroyContext();
+        glfwTerminate();
+    }
 
 	return 0;
 }
