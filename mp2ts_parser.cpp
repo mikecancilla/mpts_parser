@@ -1205,22 +1205,6 @@ GUI_ERROR:
                     j++;
                 }
 
-                /*
-                if (currentTest)
-			    {
-				    currentTest->OnUpdate(0.f);
-				    currentTest->OnRender();
-				    ImGui::Begin("Test");
-				    if (currentTest != testMenu && ImGui::Button("<-"))
-				    {
-					    delete currentTest;
-					    currentTest = testMenu;
-				    }
-				    currentTest->OnImGuiRender();
-				    ImGui::End();
-			    }
-                */
-
 			    ImGui::Render();
 			    ImGui_ImplGlfwGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -1254,23 +1238,8 @@ GUI_ERROR:
             glClear(GL_COLOR_BUFFER_BIT);
 
 			ImGui_ImplGlfwGL3_NewFrame();
-/*
-            if (currentTest)
-			{
-				currentTest->OnUpdate(0.f);
-				currentTest->OnRender();
-				ImGui::Begin("Test");
-				if (currentTest != testMenu && ImGui::Button("<-"))
-				{
-					delete currentTest;
-					currentTest = testMenu;
-				}
-				currentTest->OnImGuiRender();
-				ImGui::End();
-			}
-*/
 
-			ImGui::Render();
+            ImGui::Render();
 			ImGui_ImplGlfwGL3_RenderDrawData(ImGui::GetDrawData());
 
             /* Swap front and back buffers */
