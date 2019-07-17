@@ -165,41 +165,41 @@ void inline inc_ptr(uint8_t *&p, int bytes)
 void init_stream_types()
 {
     g_stream_map[0x0] = "Reserved";	                            
-    g_stream_map[0x1] = "MPEG - 1 Video";
-    g_stream_map[0x2] = "MPEG - 2 Video";
-    g_stream_map[0x3] = "MPEG - 1 Audio";
-    g_stream_map[0x4] = "MPEG - 2 Audio";
-    g_stream_map[0x5] = "ISO 13818 - 1 private sections";
-    g_stream_map[0x6] = "ISO 13818 - 1 PES private data";
+    g_stream_map[0x1] = "MPEG-1 Video";
+    g_stream_map[0x2] = "MPEG-2 Video";
+    g_stream_map[0x3] = "MPEG-1 Audio";
+    g_stream_map[0x4] = "MPEG-2 Audio";
+    g_stream_map[0x5] = "ISO 13818-1 private sections";
+    g_stream_map[0x6] = "ISO 13818-1 PES private data";
     g_stream_map[0x7] = "ISO 13522 MHEG";
-    g_stream_map[0x8] = "ISO 13818 - 1 DSM - CC";
-    g_stream_map[0x9] = "ISO 13818 - 1 auxiliary";
-    g_stream_map[0xa] = "ISO 13818 - 6 multi - protocol encap";
-    g_stream_map[0xb] = "ISO 13818 - 6 DSM - CC U - N msgs";
-    g_stream_map[0xc] = "ISO 13818 - 6 stream descriptors";
-    g_stream_map[0xd] = "ISO 13818 - 6 sections";
-    g_stream_map[0xe] = "ISO 13818 - 1 auxiliary";
-    g_stream_map[0xf] = "MPEG - 2 AAC Audio";
-    g_stream_map[0x10] = "MPEG - 4 Video";
-    g_stream_map[0x11] = "MPEG - 4 LATM AAC Audio";
-    g_stream_map[0x12] = "MPEG - 4 generic";
-    g_stream_map[0x13] = "ISO 14496 - 1 SL - packetized";
-    g_stream_map[0x14] = "ISO 13818 - 6 Synchronized Download Protocol";
+    g_stream_map[0x8] = "ISO 13818-1 DSM - CC";
+    g_stream_map[0x9] = "ISO 13818-1 auxiliary";
+    g_stream_map[0xa] = "ISO 13818-6 multi-protocol encap";
+    g_stream_map[0xb] = "ISO 13818-6 DSM-CC U-N msgs";
+    g_stream_map[0xc] = "ISO 13818-6 stream descriptors";
+    g_stream_map[0xd] = "ISO 13818-6 sections";
+    g_stream_map[0xe] = "ISO 13818-1 auxiliary";
+    g_stream_map[0xf] = "MPEG-2 AAC Audio";
+    g_stream_map[0x10] = "MPEG-4 Video";
+    g_stream_map[0x11] = "MPEG-4 LATM AAC Audio";
+    g_stream_map[0x12] = "MPEG-4 generic";
+    g_stream_map[0x13] = "ISO 14496-1 SL-packetized";
+    g_stream_map[0x14] = "ISO 13818-6 Synchronized Download Protocol";
     g_stream_map[0x1b] = "H.264 Video";
     g_stream_map[0x80] = "DigiCipher II Video";
-    g_stream_map[0x81] = "A52 / AC - 3 Audio";
+    g_stream_map[0x81] = "A52 / AC-3 Audio";
     g_stream_map[0x82] = "HDMV DTS Audio";
     g_stream_map[0x83] = "LPCM Audio";
     g_stream_map[0x84] = "SDDS Audio";
     g_stream_map[0x85] = "ATSC Program ID";
-    g_stream_map[0x86] = "DTS - HD Audio";
-    g_stream_map[0x87] = "E - AC - 3 Audio";
+    g_stream_map[0x86] = "DTS-HD Audio";
+    g_stream_map[0x87] = "E-AC- 3 Audio";
     g_stream_map[0x8a] = "DTS Audio";
-    g_stream_map[0x91] = "A52b / AC - 3 Audio";
+    g_stream_map[0x91] = "A52b / AC-3 Audio";
     g_stream_map[0x92] = "DVD_SPU vls Subtitle";
     g_stream_map[0x94] = "SDDS Audio";
     g_stream_map[0xa0] = "MSCODEC Video";
-    g_stream_map[0xea] = "Private ES(VC - 1)";
+    g_stream_map[0xea] = "Private ES(VC-1)";
 }
 
 inline uint16_t read_2_bytes(uint8_t *p)
