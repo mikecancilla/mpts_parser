@@ -72,6 +72,104 @@ Value	StreamType	                        Value	StreamType
 size_t read_descriptors(uint8_t *p, uint16_t program_info_length);
 
 // Type definitions
+enum eStreamType
+{
+    eReserved                                   = 0x0, 
+    eMPEG1_Video                                = 0x1, 
+    eMPEG2_Video                                = 0x2, 
+    eMPEG1_Audio                                = 0x3, 
+    eMPEG2_Audio                                = 0x4, 
+    eISO13818_1_private_sections                = 0x5, 
+    eISO13818_1_PES_private_data                = 0x6, 
+    eISO13522_MHEG                              = 0x7, 
+    eISO13818_1_DSM_CC                          = 0x8, 
+    eISO13818_1_auxiliary                       = 0x9, 
+    eISO13818_6_multi_protocol_encap            = 0xa, 
+    eISO13818_6_DSM_CC_UN_msgs                  = 0xb, 
+    eISO13818_6_stream_descriptors              = 0xc, 
+    eISO13818_6_sections                        = 0xd, 
+    eISO13818_1_auxiliary2                      = 0xe, 
+    eMPEG2_AAC_Audio                            = 0xf, 
+    eMPEG4_Video                                = 0x10,
+    eMPEG4_LATM_AAC_Audio                       = 0x11,
+    eMPEG4_generic                              = 0x12,
+    eISO14496_1_SL_packetized                   = 0x13,
+    eISO13818_6_Synchronized_Download_Protocol  = 0x14,
+    eH264_Video                                 = 0x1b,
+    eDigiCipher_II_Video                        = 0x80,
+    eA52_AC3_Audio                              = 0x81,
+    eHDMV_DTS_Audio                             = 0x82,
+    eLPCM_Audio                                 = 0x83,
+    eSDDS_Audio                                 = 0x84,
+    eATSC_Program_ID                            = 0x85,
+    eDTSHD_Audio                                = 0x86,
+    eEAC3_Audio                                 = 0x87,
+    eDTS_Audio                                  = 0x8a,
+    eA52b_AC3_Audio                             = 0x91,
+    eDVD_SPU_vls_Subtitle                       = 0x92,
+    eSDDS_Audio2                                = 0x94,
+    eMSCODEC_Video                              = 0xa0,
+    ePrivate_ES_VC1                             = 0xea
+};
+
+struct AccessUnitElement
+{
+    size_t startByteLocation;
+    size_t numPackets;
+    uint8_t packetSize;
+
+    AccessUnitElement()
+        : startByteLocation(-1)
+        , numPackets(-1)
+        , packetSize(0)
+    {
+    }
+
+    AccessUnitElement(size_t startByteLocation, size_t numPackets, uint8_t packetSize)
+        : startByteLocation(startByteLocation)
+        , numPackets(numPackets)
+        , packetSize(packetSize)
+    {
+    }
+};
+
+struct ElementaryStreamDescriptor
+{
+    std::string name;
+    eStreamType type;
+    long pid;
+
+    ElementaryStreamDescriptor()
+        : name("")
+        , type(eReserved)
+        , pid(-1)
+    {
+    }
+
+    ElementaryStreamDescriptor(std::string name, eStreamType type, long int pid)
+        : name(name)
+        , type(type)
+        , pid(pid)
+    {
+    }
+};
+
+struct AccessUnit
+{
+    ElementaryStreamDescriptor esd;
+
+    std::vector<AccessUnitElement> accessUnitElements;
+    
+    AccessUnit()
+    {
+    }
+
+    AccessUnit(std::string name, eStreamType type, long int pid)
+        : esd(name, type, pid)
+    {
+    }
+};
+
 struct pid_entry_type
 {
     std::string pid_name;
@@ -95,10 +193,13 @@ stream_map_type g_stream_map;
 pid_map_type g_pid_map;
 pid_list_type g_pid_list;
 
-bool g_b_xml = false;
+bool g_b_xml =      true;
 bool g_b_progress = false;
-bool g_b_gui = false;
-bool g_b_debug = false;
+bool g_b_gui =      false;
+bool g_b_debug =    false;
+bool g_b_terse =    true;
+bool g_b_want_pat = true;
+bool g_b_want_pmt = true;
 
 int16_t g_program_number = -1;
 int16_t g_program_map_pid = -1;
@@ -934,14 +1035,25 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
 int16_t process_pid(uint16_t pid, uint8_t *p, bool payload_unit_start)
 {
     if(pid == 0x00)
-        read_pat(p, payload_unit_start);
+    {
+        if(g_b_want_pat)
+            read_pat(p, payload_unit_start);
+
+        if(g_b_terse)
+            g_b_want_pat = false;
+    }
     else if(pid == g_program_map_pid)
-        read_pmt(p, payload_unit_start);
+    {
+        if(g_b_want_pmt)
+            read_pmt(p, payload_unit_start);
+
+        if(g_b_terse)
+            g_b_want_pmt = false;
+    }
     else
     {
         // Here, p is pointing at actual data, like video or audio.
         // For now just print the data's type.
-        char *type_string = g_pid_map[pid];
         printf_xml(2, "<type_name>%s</type_name>\n", g_pid_map[pid]);
 
         if(g_b_gui)
@@ -1000,29 +1112,36 @@ int16_t process_packet(uint8_t *packet, size_t packet_num)
 
     uint8_t transport_error_indicator = (PID & 0x8000) >> 15;
     uint8_t payload_unit_start_indicator = (PID & 0x4000) >> 14;
+
     uint8_t transport_priority = (PID & 0x2000) >> 13;
 
     PID &= 0x1FFF;
 
-    // Move beyond the 32 bit header
-    uint8_t final_byte = *p;
-    inc_ptr(p, 1);
-
-    uint8_t transport_scrambling_control = (final_byte & 0xC0) >> 6;
-    uint8_t adaptation_field_control = (final_byte & 0x30) >> 4;
-    uint8_t continuity_counter = (final_byte & 0x0F) >> 4;
-
-    if (0x2 == adaptation_field_control ||
-        0x3 == adaptation_field_control)
-        assert(1);
-
     printf_xml(2, "<pid>0x%x</pid>\n", PID);
-    printf_xml(2, "<transport_error_indicator>0x%x</transport_error_indicator>\n", transport_error_indicator);
     printf_xml(2, "<payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payload_unit_start_indicator);
-    printf_xml(2, "<transport_priority>0x%x</transport_priority>\n", transport_priority);
-    printf_xml(2, "<transport_scrambling_control>0x%x</transport_scrambling_control>\n", transport_scrambling_control);
-    printf_xml(2, "<adaptation_field_control>0x%x</adaptation_field_control>\n", adaptation_field_control);
-    printf_xml(2, "<continuity_counter>0x%x</continuity_counter>\n", continuity_counter);
+
+    if(false == g_b_terse)
+    {
+        // Move beyond the 32 bit header
+        uint8_t final_byte = *p;
+        inc_ptr(p, 1);
+
+        uint8_t transport_scrambling_control = (final_byte & 0xC0) >> 6;
+        uint8_t adaptation_field_control = (final_byte & 0x30) >> 4;
+        uint8_t continuity_counter = (final_byte & 0x0F) >> 4;
+
+        if (0x2 == adaptation_field_control ||
+            0x3 == adaptation_field_control)
+            assert(1);
+
+        printf_xml(2, "<transport_error_indicator>0x%x</transport_error_indicator>\n", transport_error_indicator);
+        printf_xml(2, "<transport_priority>0x%x</transport_priority>\n", transport_priority);
+        printf_xml(2, "<transport_scrambling_control>0x%x</transport_scrambling_control>\n", transport_scrambling_control);
+        printf_xml(2, "<adaptation_field_control>0x%x</adaptation_field_control>\n", adaptation_field_control);
+        printf_xml(2, "<continuity_counter>0x%x</continuity_counter>\n", continuity_counter);
+    }
+    else
+        inc_ptr(p, 1);
 
     ret = process_pid(PID, p, 1 == payload_unit_start_indicator);
 
@@ -1038,14 +1157,16 @@ int main(int argc, char* argv[])
 {
     if (0 == argc)
     {
-        fprintf(stderr, "Usage: %s [-g] [-p] [-x] mp2ts_file\n", argv[0]);
+        fprintf(stderr, "%s: Output extensive xml representation of MP2TS file to stdout\n", argv[0]);
+        fprintf(stderr, "Usage: %s [-g] [-p] [-q] mp2ts_file\n", argv[0]);
         fprintf(stderr, "-g: Generate an OpenGL GUI representing the MP2TS\n");
         fprintf(stderr, "-p: Print progress on a single line to stderr\n");
-        fprintf(stderr, "-x: Output extensive xml representation of MP2TS file to stdout\n");
+        fprintf(stderr, "-q: No output. Run through the file and only print errors\n");
+        fprintf(stderr, "-v: Verbose output. Careful with this one\n");
         return 0;
     }
 
-    for (int i = 0; i < argc - 1; i++)
+    for (int i = 1; i < argc - 1; i++)
     {
         if (0 == strcmp("-d", argv[i]))
             g_b_debug = true;
@@ -1056,8 +1177,11 @@ int main(int argc, char* argv[])
         if (0 == strcmp("-p", argv[i]))
             g_b_progress = true;
 
-        if(0 == strcmp("-x", argv[i]))
-            g_b_xml = true;
+        if(0 == strcmp("-q", argv[i]))
+            g_b_xml = false;
+
+        if(0 == strcmp("-v", argv[i]))
+            g_b_terse = false;
     }
 
     if(g_b_gui)
@@ -1168,6 +1292,10 @@ GUI_ERROR:
     printf_xml(0, "<file>\n");
     printf_xml(1, "<name>%s</name>\n", argv[argc - 1]);
     printf_xml(1, "<packet_size>%d</packet_size>\n", packet_size);
+    if(g_b_terse)
+        printf_xml(1, "<terse>1</terse>\n");
+    else
+        printf_xml(1, "<terse>0</terse>\n");
 
 	while((size_t) (packet - packet_buffer) < packet_buffer_size)
 	{
@@ -1179,7 +1307,7 @@ GUI_ERROR:
             err = process_packet(packet, packet_num);
 
         if(0 != err)
-            return err;
+            goto error;
 
         total_read += packet_size;
         g_ptr_position = total_read;
@@ -1241,6 +1369,7 @@ GUI_ERROR:
         }
     }
 
+error:
     printf_xml(0, "</file>\n");
 
     delete packet_buffer;
