@@ -60,12 +60,6 @@ Value	StreamType	                        Value	StreamType
 #include <vector>
 #include <map>
 
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
-
-#include "imgui.h"
-#include "imgui_impl_glfw_gl3.h"
-
 #define READ_2_BYTES(p) *p | (*(p+1) << 8); p+=2;
 
 // Forward function definitions
@@ -112,71 +106,13 @@ enum eStreamType
     ePrivate_ES_VC1                             = 0xea
 };
 
-struct AccessUnitElement
-{
-    size_t startByteLocation;
-    size_t numPackets;
-    uint8_t packetSize;
-
-    AccessUnitElement()
-        : startByteLocation(-1)
-        , numPackets(-1)
-        , packetSize(0)
-    {
-    }
-
-    AccessUnitElement(size_t startByteLocation, size_t numPackets, uint8_t packetSize)
-        : startByteLocation(startByteLocation)
-        , numPackets(numPackets)
-        , packetSize(packetSize)
-    {
-    }
-};
-
-struct ElementaryStreamDescriptor
-{
-    std::string name;
-    eStreamType type;
-    long pid;
-
-    ElementaryStreamDescriptor()
-        : name("")
-        , type(eReserved)
-        , pid(-1)
-    {
-    }
-
-    ElementaryStreamDescriptor(std::string name, eStreamType type, long int pid)
-        : name(name)
-        , type(type)
-        , pid(pid)
-    {
-    }
-};
-
-struct AccessUnit
-{
-    ElementaryStreamDescriptor esd;
-
-    std::vector<AccessUnitElement> accessUnitElements;
-    
-    AccessUnit()
-    {
-    }
-
-    AccessUnit(std::string name, eStreamType type, long int pid)
-        : esd(name, type, pid)
-    {
-    }
-};
-
 struct pid_entry_type
 {
     std::string pid_name;
-    size_t num_packets;
+    unsigned int num_packets;
     size_t pid_byte_location;
 
-    pid_entry_type(std::string pid_name, size_t num_packets, size_t pid_byte_location)
+    pid_entry_type(std::string pid_name, unsigned int num_packets, size_t pid_byte_location)
         : pid_name(pid_name)
         , num_packets(num_packets)
         , pid_byte_location(pid_byte_location)
@@ -184,30 +120,27 @@ struct pid_entry_type
     }
 };
 
-typedef std::map <uint16_t, char *> stream_map_type; // ID, Name
-typedef std::map <uint16_t, char *> pid_map_type; // ID, Name
 typedef std::vector<pid_entry_type> pid_list_type;
 
 // Global definitions
-stream_map_type g_stream_map;
-pid_map_type g_pid_map;
-pid_list_type g_pid_list;
+pid_list_type                   g_video_pid_list;
+pid_list_type                   g_audio_pid_list;
+
+std::map <uint16_t, char *>     g_stream_map; // ID, name
+std::map <uint16_t, char *>     g_pid_map; // ID, name
+std::map <uint16_t, uint16_t>   g_pid_to_type_map; // PID, stream type
 
 bool g_b_xml =      true;
 bool g_b_progress = false;
 bool g_b_gui =      false;
 bool g_b_debug =    false;
 bool g_b_terse =    true;
-bool g_b_want_pat = true;
-bool g_b_want_pmt = true;
 
 int16_t g_program_number = -1;
 int16_t g_program_map_pid = -1;
 int16_t g_network_pid = 0x0010; // default value
 int16_t g_scte35_pid = -1;
 size_t g_ptr_position = 0;
-
-GLFWwindow* g_window = NULL;
 
 #define WINDOW_WIDTH 1200
 #define WINDOW_HEIGHT 600
@@ -519,6 +452,7 @@ int16_t read_pmt(uint8_t *p, bool payload_unit_start)
             g_scte35_pid = elementary_pid;
 
         g_pid_map[elementary_pid] = g_stream_map[stream_type];
+        g_pid_to_type_map[elementary_pid] = stream_type;
 
         my_printf("    %d) pid:%x, stream_type:%x (%s)\n", stream_count++, elementary_pid, stream_type, g_stream_map[stream_type]);
 
@@ -1031,55 +965,151 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
     return p - p_descriptor_start;
 }
 
+struct AVFrame
+{
+    int pid;
+    int frameNumber;
+    int totalPackets;
+    pid_list_type pidList;
+
+    AVFrame()
+        : pid(-1)
+        , frameNumber(1)
+        , totalPackets(0)
+    {}
+};
+
 // Process each PID for each 188 byte packet
-int16_t process_pid(uint16_t pid, uint8_t *p, bool payload_unit_start)
+int16_t process_pid(uint16_t pid, uint8_t *p, size_t packetStart, size_t packetNum, bool payload_unit_start)
 {
     if(pid == 0x00)
     {
+        static bool g_b_want_pat = true;
+
         if(g_b_want_pat)
+        {
+            if(g_b_terse)
+            {
+                printf_xml(1, "<packet start=\"%zd\">\n", packetStart);
+                printf_xml(2, "<number>%zd</number>\n", packetNum);
+                printf_xml(2, "<pid>0x%x</pid>\n", pid);
+                printf_xml(2, "<payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payload_unit_start ? 1 : 0);
+            }
+
             read_pat(p, payload_unit_start);
+
+            if(g_b_terse)
+                printf_xml(1, "</packet>\n");
+        }
 
         if(g_b_terse)
             g_b_want_pat = false;
     }
     else if(pid == g_program_map_pid)
     {
+        static bool g_b_want_pmt = true;
+
         if(g_b_want_pmt)
+        {
+            if(g_b_terse)
+            {
+                printf_xml(1, "<packet start=\"%zd\">\n", packetStart);
+                printf_xml(2, "<number>%zd</number>\n", packetNum);
+                printf_xml(2, "<pid>0x%x</pid>\n", pid);
+                printf_xml(2, "<payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payload_unit_start ? 1 : 0);
+            }
+
             read_pmt(p, payload_unit_start);
+
+            if(g_b_terse)
+                printf_xml(1, "</packet>\n");
+        }
 
         if(g_b_terse)
             g_b_want_pmt = false;
     }
     else
     {
-        // Here, p is pointing at actual data, like video or audio.
-        // For now just print the data's type.
-        printf_xml(2, "<type_name>%s</type_name>\n", g_pid_map[pid]);
-
-        if(g_b_gui)
+        if(false == g_b_terse)
         {
-            static size_t last_pid = -1;
-            static size_t ptr_position = 0;
-            static size_t num_packets = 1;
+            // Here, p is pointing at actual data, like video or audio.
+            // For now just print the data's type.
+            printf_xml(2, "<type_name>%s</type_name>\n", g_pid_map[pid]);
+        }
+        else
+        {
+            static AVFrame videoFrame;
+            static AVFrame audioFrame;
+            static size_t lastPid = -1;
 
-            if(-1 == last_pid)
-            {
-                ptr_position = g_ptr_position;
-            }
-            else if(last_pid != pid)
-            {
-                pid_entry_type p(g_pid_map[last_pid], num_packets, ptr_position);
-                g_pid_list.push_back(p);
+            AVFrame *p_avFrame = nullptr;
 
-                ptr_position = g_ptr_position;
-                num_packets = 1;
-            }
-            else
+            switch(g_pid_to_type_map[pid])
             {
-                num_packets++;
+                case eMPEG1_Video:
+                case eMPEG2_Video:
+                case eMPEG4_Video:
+                case eH264_Video:
+                case eDigiCipher_II_Video:
+                case eMSCODEC_Video:
+                    p_avFrame = &videoFrame;
+                break;
+
+                case eMPEG1_Audio:
+                case eMPEG2_Audio:
+                case eMPEG2_AAC_Audio:
+                case eMPEG4_LATM_AAC_Audio:
+                case eA52_AC3_Audio:
+                case eHDMV_DTS_Audio:
+                case eA52b_AC3_Audio:
+                case eSDDS_Audio:
+                    p_avFrame = &audioFrame;
+                break;
             }
 
-            last_pid = pid;
+            if(p_avFrame)
+            {
+                bool bNewSet = false;
+
+                if(payload_unit_start)
+                {
+                    if(p_avFrame->pidList.size())
+                    {
+                        for(pid_list_type::iterator p = p_avFrame->pidList.begin(); p != p_avFrame->pidList.end(); p++)
+                            p_avFrame->totalPackets += p->num_packets;
+
+                        printf_xml(1,
+                                   "<frame number=\"%d\" name=\"%s\" packets=\"%d\" pid=\"0x%x\">\n",
+                                   p_avFrame->frameNumber++, p_avFrame->pidList[0].pid_name.c_str(), p_avFrame->totalPackets, pid);
+
+                        for(pid_list_type::iterator p = p_avFrame->pidList.begin(); p != p_avFrame->pidList.end(); p++)
+                            printf_xml(2, "<slice byte=\"%d\" packets=\"%d\"/>\n", p->pid_byte_location, p->num_packets);
+
+                        printf_xml(1, "</frame>\n");
+
+                        p_avFrame->totalPackets = 0;
+                    }
+
+                    p_avFrame->pidList.clear();
+                    bNewSet = true;
+                }
+
+                if(-1 != lastPid && pid != lastPid)
+                    bNewSet = true;
+
+                if(bNewSet)
+                {
+                    pid_entry_type p(g_pid_map[pid], 1, packetStart);
+                    p_avFrame->pidList.push_back(p);
+                }
+                else
+                {
+                    pid_entry_type &p = p_avFrame->pidList.back();
+                    p.num_packets++;
+                }
+            }
+
+            lastPid = pid;
         }
     }
 
@@ -1087,20 +1117,24 @@ int16_t process_pid(uint16_t pid, uint8_t *p, bool payload_unit_start)
 }
 
 // Get the PID and other info
-int16_t process_packet(uint8_t *packet, size_t packet_num)
+int16_t process_packet(uint8_t *packet, size_t packetNum)
 {
     uint8_t *p = NULL;
     int16_t ret = -1;
+    size_t packetStart = g_ptr_position;
 
-    printf_xml(1, "<packet start=\"%zd\">\n", g_ptr_position);
-    printf_xml(2, "<number>%zd</number>\n", packet_num);
+    if(false == g_b_terse)
+    {
+        printf_xml(1, "<packet start=\"%zd\">\n", g_ptr_position);
+        printf_xml(2, "<number>%zd</number>\n", packetNum);
+    }
 
     p = packet;
 
     if (0x47 != *p)
     {
-        printf_xml(2, "<error>Packet %zd does not start with 0x47</error>\n", packet_num);
-        fprintf(stderr, "Error: Packet %zd does not start with 0x47\n", packet_num);
+        printf_xml(2, "<error>Packet %zd does not start with 0x47</error>\n", packetNum);
+        fprintf(stderr, "Error: Packet %zd does not start with 0x47\n", packetNum);
         goto process_packet_error;
     }
 
@@ -1117,11 +1151,11 @@ int16_t process_packet(uint8_t *packet, size_t packet_num)
 
     PID &= 0x1FFF;
 
-    printf_xml(2, "<pid>0x%x</pid>\n", PID);
-    printf_xml(2, "<payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payload_unit_start_indicator);
-
     if(false == g_b_terse)
     {
+        printf_xml(2, "<pid>0x%x</pid>\n", PID);
+        printf_xml(2, "<payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payload_unit_start_indicator);
+
         // Move beyond the 32 bit header
         uint8_t final_byte = *p;
         inc_ptr(p, 1);
@@ -1143,11 +1177,12 @@ int16_t process_packet(uint8_t *packet, size_t packet_num)
     else
         inc_ptr(p, 1);
 
-    ret = process_pid(PID, p, 1 == payload_unit_start_indicator);
+    ret = process_pid(PID, p, packetStart, packetNum, 1 == payload_unit_start_indicator);
 
 process_packet_error:
 
-    printf_xml(1, "</packet>\n");
+    if(false == g_b_terse)
+        printf_xml(1, "</packet>\n");
 
     return ret;
 }
@@ -1184,55 +1219,13 @@ int main(int argc, char* argv[])
             g_b_terse = false;
     }
 
-    if(g_b_gui)
-    {
-        unsigned int err = GLFW_NO_ERROR;
-
-        /* Initialize the library */
-        if(!glfwInit())
-            return -1;
-
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-        /* Create a windowed mode window and its OpenGL context */
-        g_window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Mpeg2-TS Parser GUI", NULL, NULL);
-        if (!g_window)
-        {
-            fprintf(stderr, "Could not create GL window! Continuing without a GUI!\n");
-            glfwTerminate();
-            g_b_gui = false;
-            goto GUI_ERROR;
-        }
-
-        /* Make the window's context current */
-        glfwMakeContextCurrent(g_window);
-
-        glfwSwapInterval(1);
-
-        if(glewInit() != GLEW_OK)
-        {
-            fprintf(stderr, "Glew Initialization Error! Continuing without a GUI!\n");
-            glfwTerminate();
-            g_b_gui = false;
-            goto GUI_ERROR;
-        }
-
-		ImGui::CreateContext();
-		ImGui_ImplGlfwGL3_Init(g_window, true);
-		ImGui::StyleColorsDark();
-    }
-
-GUI_ERROR:
-
     uint8_t *packet_buffer, *packet;
 	uint16_t program_map_pid = 0;
-    size_t packet_num = 0;
+    unsigned int packet_num = 0;
 
 	size_t packet_buffer_size = 0;
     size_t total_read = 0;
-    size_t read_block_size = 0;
+    unsigned int read_block_size = 0;
 
 	FILE *f = nullptr;
 	fopen_s(&f, argv[argc - 1], "rb");
@@ -1245,8 +1238,12 @@ GUI_ERROR:
 
     // Determine the size of the file
     fseek(f, 0L, SEEK_END);
-    size_t file_size = ftell(f);
+    long int file_size = ftell(f);
     fseek(f, 0L, SEEK_SET);
+
+//    struct _stat stat_buf;
+//    _stat(argv[argc - 1], &stat_buf);
+//    long int file_size = stat_buf.st_size;
 
     // Need to determine packet size.
     // Standard is 188, but digital video cameras add a 4 byte timecode
@@ -1256,7 +1253,7 @@ GUI_ERROR:
     uint8_t temp_buffer[5];
     fread(temp_buffer, 1, 5, f);
 
-    uint8_t packet_size = 0;
+    unsigned int packet_size = 0;
 
     if(0x47 == temp_buffer[0])
         packet_size = 188;
@@ -1297,6 +1294,10 @@ GUI_ERROR:
     else
         printf_xml(1, "<terse>0</terse>\n");
 
+    float step = 1.f;
+    float nextStep = 0.f;
+    float progress = 0.f;
+
 	while((size_t) (packet - packet_buffer) < packet_buffer_size)
 	{
         int err = 0;
@@ -1313,7 +1314,15 @@ GUI_ERROR:
         g_ptr_position = total_read;
 
         if(g_b_progress)
-            fprintf(stderr, "  total_read:%zd, %2.2f%%\r", total_read, ((double)total_read / (double)file_size) * 100.);
+        {
+            if(progress >= nextStep)
+            {
+                fprintf(stderr, "  total_read:%zd, %2.2f%%\r", total_read, progress);
+                nextStep += step;
+            }
+
+            progress = ((float)total_read / (float)file_size) * 100.;
+        }
 
         if(0 == (total_read % read_block_size))
         {
@@ -1326,47 +1335,6 @@ GUI_ERROR:
         assert(packet_buffer_size > 0);
 
         packet_num++;
-
-        if(g_b_gui)
-        {
-            if(!glfwWindowShouldClose(g_window))
-            {
-			    glClearColor(0.f, 0.f, 0.f, 1.f);
-                glClear(GL_COLOR_BUFFER_BIT);
-
-			    ImGui_ImplGlfwGL3_NewFrame();
-
-                char buffer[128];
-                sprintf_s(buffer, 128, "Mpeg2-TS Parser GUI : Total Read:%zd, %2.2f%%", total_read, ((double)total_read / (double)file_size) * 100.f);
-
-                glfwSetWindowTitle(g_window, buffer);
-
-                unsigned int j = 0;
-                for(pid_list_type::iterator i = g_pid_list.begin(); i < g_pid_list.end(); i++)
-                {
-                    if(ImGui::TreeNode((void*) j, "Type:%s, Byte Location:%ld, Num Packets:%ld", i->pid_name.c_str(), i->pid_byte_location, i->num_packets))
-                        ImGui::TreePop();
-
-                    j++;
-                }
-
-			    ImGui::Render();
-			    ImGui_ImplGlfwGL3_RenderDrawData(ImGui::GetDrawData());
-
-                /* Swap front and back buffers */
-                glfwSwapBuffers(g_window);
-
-                /* Poll for and process events */
-                glfwPollEvents();
-            }
-            else
-            {
-	            ImGui_ImplGlfwGL3_Shutdown();
-	            ImGui::DestroyContext();
-                glfwTerminate();
-                g_b_gui = false;
-            }
-        }
     }
 
 error:
@@ -1375,30 +1343,6 @@ error:
     delete packet_buffer;
 
 	fclose(f);
-
-    if(g_b_gui)
-    {
-        while(!glfwWindowShouldClose(g_window))
-        {
-			glClearColor(0.f, 0.f, 0.f, 1.f);
-            glClear(GL_COLOR_BUFFER_BIT);
-
-			ImGui_ImplGlfwGL3_NewFrame();
-
-            ImGui::Render();
-			ImGui_ImplGlfwGL3_RenderDrawData(ImGui::GetDrawData());
-
-            /* Swap front and back buffers */
-            glfwSwapBuffers(g_window);
-
-            /* Poll for and process events */
-            glfwPollEvents();
-        }
-
-        ImGui_ImplGlfwGL3_Shutdown();
-	    ImGui::DestroyContext();
-        glfwTerminate();
-    }
 
 	return 0;
 }
