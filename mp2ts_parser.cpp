@@ -1237,13 +1237,17 @@ int main(int argc, char* argv[])
     }
 
     // Determine the size of the file
-    fseek(f, 0L, SEEK_END);
-    long int file_size = ftell(f);
-    fseek(f, 0L, SEEK_SET);
+    int64_t file_size = 0;
 
-//    struct _stat stat_buf;
-//    _stat(argv[argc - 1], &stat_buf);
-//    long int file_size = stat_buf.st_size;
+#ifdef WINDOWS
+    struct __stat64 stat64_buf;
+    _stat64(argv[argc - 1], &stat64_buf);
+    file_size = stat64_buf.st_size;
+#else
+    fseek(f, 0L, SEEK_END);
+    file_size = ftell(f);
+    fseek(f, 0L, SEEK_SET);
+#endif
 
     // Need to determine packet size.
     // Standard is 188, but digital video cameras add a 4 byte timecode
