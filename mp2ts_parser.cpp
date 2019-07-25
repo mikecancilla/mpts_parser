@@ -110,9 +110,9 @@ struct pid_entry_type
 {
     std::string pid_name;
     unsigned int num_packets;
-    size_t pid_byte_location;
+    int64_t pid_byte_location;
 
-    pid_entry_type(std::string pid_name, unsigned int num_packets, size_t pid_byte_location)
+    pid_entry_type(std::string pid_name, unsigned int num_packets, int64_t pid_byte_location)
         : pid_name(pid_name)
         , num_packets(num_packets)
         , pid_byte_location(pid_byte_location)
@@ -140,7 +140,7 @@ int16_t g_program_number = -1;
 int16_t g_program_map_pid = -1;
 int16_t g_network_pid = 0x0010; // default value
 int16_t g_scte35_pid = -1;
-size_t g_ptr_position = 0;
+int64_t g_ptr_position = 0;
 
 #define WINDOW_WIDTH 1200
 #define WINDOW_HEIGHT 600
@@ -980,7 +980,7 @@ struct AVFrame
 };
 
 // Process each PID for each 188 byte packet
-int16_t process_pid(uint16_t pid, uint8_t *p, size_t packetStart, size_t packetNum, bool payload_unit_start)
+int16_t process_pid(uint16_t pid, uint8_t *p, int64_t packetStart, size_t packetNum, bool payload_unit_start)
 {
     if(pid == 0x00)
     {
@@ -990,7 +990,7 @@ int16_t process_pid(uint16_t pid, uint8_t *p, size_t packetStart, size_t packetN
         {
             if(g_b_terse)
             {
-                printf_xml(1, "<packet start=\"%zd\">\n", packetStart);
+                printf_xml(1, "<packet start=\"%llu\">\n", packetStart);
                 printf_xml(2, "<number>%zd</number>\n", packetNum);
                 printf_xml(2, "<pid>0x%x</pid>\n", pid);
                 printf_xml(2, "<payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payload_unit_start ? 1 : 0);
@@ -1013,7 +1013,7 @@ int16_t process_pid(uint16_t pid, uint8_t *p, size_t packetStart, size_t packetN
         {
             if(g_b_terse)
             {
-                printf_xml(1, "<packet start=\"%zd\">\n", packetStart);
+                printf_xml(1, "<packet start=\"%llu\">\n", packetStart);
                 printf_xml(2, "<number>%zd</number>\n", packetNum);
                 printf_xml(2, "<pid>0x%x</pid>\n", pid);
                 printf_xml(2, "<payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payload_unit_start ? 1 : 0);
@@ -1083,7 +1083,7 @@ int16_t process_pid(uint16_t pid, uint8_t *p, size_t packetStart, size_t packetN
                                    p_avFrame->frameNumber++, p_avFrame->pidList[0].pid_name.c_str(), p_avFrame->totalPackets, pid);
 
                         for(pid_list_type::iterator p = p_avFrame->pidList.begin(); p != p_avFrame->pidList.end(); p++)
-                            printf_xml(2, "<slice byte=\"%d\" packets=\"%d\"/>\n", p->pid_byte_location, p->num_packets);
+                            printf_xml(2, "<slice byte=\"%llu\" packets=\"%d\"/>\n", p->pid_byte_location, p->num_packets);
 
                         printf_xml(1, "</frame>\n");
 
@@ -1121,11 +1121,11 @@ int16_t process_packet(uint8_t *packet, size_t packetNum)
 {
     uint8_t *p = NULL;
     int16_t ret = -1;
-    size_t packetStart = g_ptr_position;
+    int64_t packetStart = g_ptr_position;
 
     if(false == g_b_terse)
     {
-        printf_xml(1, "<packet start=\"%zd\">\n", g_ptr_position);
+        printf_xml(1, "<packet start=\"%llu\">\n", g_ptr_position);
         printf_xml(2, "<number>%zd</number>\n", packetNum);
     }
 
@@ -1224,8 +1224,8 @@ int main(int argc, char* argv[])
     unsigned int packet_num = 0;
 
 	size_t packet_buffer_size = 0;
-    size_t total_read = 0;
-    unsigned int read_block_size = 0;
+    int64_t total_read = 0;
+    int64_t read_block_size = 0;
 
 	FILE *f = nullptr;
 	fopen_s(&f, argv[argc - 1], "rb");
@@ -1292,6 +1292,7 @@ int main(int argc, char* argv[])
     printf_xml(0, "<?xml version = \"1.0\" encoding = \"UTF-8\"?>\n");
     printf_xml(0, "<file>\n");
     printf_xml(1, "<name>%s</name>\n", argv[argc - 1]);
+    printf_xml(1, "<file_size>%llu</file_size>\n", file_size);
     printf_xml(1, "<packet_size>%d</packet_size>\n", packet_size);
     if(g_b_terse)
         printf_xml(1, "<terse>1</terse>\n");
