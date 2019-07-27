@@ -965,16 +965,16 @@ size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
     return p - p_descriptor_start;
 }
 
-struct AVFrame
+struct Frame
 {
     int pid;
     int frameNumber;
     int totalPackets;
     pid_list_type pidList;
 
-    AVFrame()
+    Frame()
         : pid(-1)
-        , frameNumber(1)
+        , frameNumber(0)
         , totalPackets(0)
     {}
 };
@@ -1038,11 +1038,11 @@ int16_t process_pid(uint16_t pid, uint8_t *p, int64_t packetStart, size_t packet
         }
         else
         {
-            static AVFrame videoFrame;
-            static AVFrame audioFrame;
+            static Frame videoFrame;
+            static Frame audioFrame;
             static size_t lastPid = -1;
 
-            AVFrame *p_avFrame = nullptr;
+            Frame *p_frame = nullptr;
 
             switch(g_pid_to_type_map[pid])
             {
@@ -1052,7 +1052,7 @@ int16_t process_pid(uint16_t pid, uint8_t *p, int64_t packetStart, size_t packet
                 case eH264_Video:
                 case eDigiCipher_II_Video:
                 case eMSCODEC_Video:
-                    p_avFrame = &videoFrame;
+                    p_frame = &videoFrame;
                 break;
 
                 case eMPEG1_Audio:
@@ -1063,34 +1063,34 @@ int16_t process_pid(uint16_t pid, uint8_t *p, int64_t packetStart, size_t packet
                 case eHDMV_DTS_Audio:
                 case eA52b_AC3_Audio:
                 case eSDDS_Audio:
-                    p_avFrame = &audioFrame;
+                    p_frame = &audioFrame;
                 break;
             }
 
-            if(p_avFrame)
+            if(p_frame)
             {
                 bool bNewSet = false;
 
                 if(payload_unit_start)
                 {
-                    if(p_avFrame->pidList.size())
+                    if(p_frame->pidList.size())
                     {
-                        for(pid_list_type::iterator p = p_avFrame->pidList.begin(); p != p_avFrame->pidList.end(); p++)
-                            p_avFrame->totalPackets += p->num_packets;
+                        for(pid_list_type::iterator p = p_frame->pidList.begin(); p != p_frame->pidList.end(); p++)
+                            p_frame->totalPackets += p->num_packets;
 
                         printf_xml(1,
                                    "<frame number=\"%d\" name=\"%s\" packets=\"%d\" pid=\"0x%x\">\n",
-                                   p_avFrame->frameNumber++, p_avFrame->pidList[0].pid_name.c_str(), p_avFrame->totalPackets, pid);
+                                   p_frame->frameNumber++, p_frame->pidList[0].pid_name.c_str(), p_frame->totalPackets, pid);
 
-                        for(pid_list_type::iterator p = p_avFrame->pidList.begin(); p != p_avFrame->pidList.end(); p++)
+                        for(pid_list_type::iterator p = p_frame->pidList.begin(); p != p_frame->pidList.end(); p++)
                             printf_xml(2, "<slice byte=\"%llu\" packets=\"%d\"/>\n", p->pid_byte_location, p->num_packets);
 
                         printf_xml(1, "</frame>\n");
 
-                        p_avFrame->totalPackets = 0;
+                        p_frame->totalPackets = 0;
                     }
 
-                    p_avFrame->pidList.clear();
+                    p_frame->pidList.clear();
                     bNewSet = true;
                 }
 
@@ -1100,11 +1100,11 @@ int16_t process_pid(uint16_t pid, uint8_t *p, int64_t packetStart, size_t packet
                 if(bNewSet)
                 {
                     pid_entry_type p(g_pid_map[pid], 1, packetStart);
-                    p_avFrame->pidList.push_back(p);
+                    p_frame->pidList.push_back(p);
                 }
                 else
                 {
-                    pid_entry_type &p = p_avFrame->pidList.back();
+                    pid_entry_type &p = p_frame->pidList.back();
                     p.num_packets++;
                 }
             }
@@ -1322,11 +1322,11 @@ int main(int argc, char* argv[])
         {
             if(progress >= nextStep)
             {
-                fprintf(stderr, "  total_read:%zd, %2.2f%%\r", total_read, progress);
+                fprintf(stderr, "Total bytes processed: %llu, %2.2f%%\r", total_read, progress);
                 nextStep += step;
             }
 
-            progress = ((float)total_read / (float)file_size) * 100.;
+            progress = ((float)total_read / (float)file_size) * 100.f;
         }
 
         if(0 == (total_read % read_block_size))
