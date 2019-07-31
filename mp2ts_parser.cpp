@@ -59,6 +59,7 @@ Value	StreamType	                        Value	StreamType
 #include <cstdarg>
 #include <vector>
 #include <map>
+#include "tinyxml2.h"
 
 #define READ_2_BYTES(p) *p | (*(p+1) << 8); p+=2;
 
@@ -188,6 +189,27 @@ void inline my_printf(const char *format, ...)
     }
 }
 
+void inline printf_xml(tinyxml2::XMLDocument *doc, const char *elementName, const char *elementText)
+{
+    if(elementText)
+    {
+        tinyxml2::XMLElement *element = doc->NewElement(elementName);
+        element->SetText(elementText);
+//        doc->InsertEndChild(element);
+        doc->InsertFirstChild(element);
+    }
+    else
+    {
+        tinyxml2::XMLElement *element = doc->NewElement(elementName);
+        if(elementName[0] != '/')
+            doc->InsertFirstChild(element);
+        else
+            doc->InsertEndChild(element);
+    }
+
+    doc->Print();
+}
+
 void inline printf_xml(unsigned int indent_level, const char *format, ...)
 {
     if(g_b_xml && format)
@@ -281,7 +303,7 @@ inline uint32_t read_4_bytes(uint8_t *p)
 // The Program Association Table provides the correspondence between a program_number and the PID value of the
 // Transport Stream packets which carry the program definition.The program_number is the numeric label associated with
 // a program.
-int16_t read_pat(uint8_t *p, bool payload_unit_start)
+int16_t read_pat(uint8_t *&p, bool payload_unit_start)
 {
     uint8_t payload_start_offset = 0;
 
@@ -367,7 +389,7 @@ int16_t read_pat(uint8_t *p, bool payload_unit_start)
 // The Program Map Table provides the mappings between program numbers and the program elements that comprise
 // them.A single instance of such a mapping is referred to as a "program definition".The program map table is the
 // complete collection of all program definitions for a Transport Stream.
-int16_t read_pmt(uint8_t *p, bool payload_unit_start)
+int16_t read_pmt(uint8_t *&p, bool payload_unit_start)
 {
     uint8_t payload_start_offset = 0;
 
@@ -979,8 +1001,22 @@ struct Frame
     {}
 };
 
+uint8_t process_PES_packet(uint8_t *&p)
+{
+    uint32_t four_bytes = read_4_bytes(p);
+    inc_ptr(p, 4);
+
+    uint32_t packet_start_code_prefix = (four_bytes & 0xffffff00) >> 8;
+    uint8_t stream_id = four_bytes & 0xff;
+
+    uint16_t PES_packet_length = read_2_bytes(p);
+    inc_ptr(p, 2);
+
+    return PES_packet_length;
+}
+
 // Process each PID for each 188 byte packet
-int16_t process_pid(uint16_t pid, uint8_t *p, int64_t packetStart, size_t packetNum, bool payload_unit_start)
+int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packetStart, size_t packetNum, bool payload_unit_start)
 {
     if(pid == 0x00)
     {
@@ -1036,7 +1072,10 @@ int16_t process_pid(uint16_t pid, uint8_t *p, int64_t packetStart, size_t packet
             // For now just print the data's type.
             printf_xml(2, "<type_name>%s</type_name>\n", g_pid_map[pid]);
         }
-        else
+        //else
+
+        process_PES_packet(p);
+
         {
             static Frame videoFrame;
             static Frame audioFrame;
@@ -1116,6 +1155,136 @@ int16_t process_pid(uint16_t pid, uint8_t *p, int64_t packetStart, size_t packet
     return 0;
 }
 
+uint8_t process_adaptation_field(unsigned int indent, uint8_t *&p)
+{
+    uint8_t adaptation_field_length = *p;
+    inc_ptr(p, 1);
+
+    uint8_t *pAdapatationFieldStart = p;
+
+    if(adaptation_field_length)
+    {
+        uint8_t byte = *p;
+        inc_ptr(p, 1);
+
+        uint8_t discontinuity_indicator = (byte & 0x80) >> 7;
+        uint8_t random_access_indicator = (byte & 0x40) >> 6;
+        uint8_t elementary_stream_priority_indicato = (byte & 0x20) >> 5;
+        uint8_t PCR_flag = (byte & 0x10) >> 4;
+        uint8_t OPCR_flag = (byte & 0x08) >> 3;
+        uint8_t splicing_point_flag = (byte & 0x04) >> 2;
+        uint8_t transport_private_data_flag = (byte & 0x02) >> 1;
+        uint8_t adaptation_field_extension_flag = (byte & 0x02) >> 1;
+
+        if(PCR_flag)
+        {
+            uint32_t four_bytes = read_4_bytes(p);
+            inc_ptr(p, 4);
+
+            uint16_t two_bytes = read_2_bytes(p);
+            inc_ptr(p, 2);
+
+            uint64_t program_clock_reference_base = four_bytes;
+            program_clock_reference_base <<= 1;
+            program_clock_reference_base |= (two_bytes & 0x80) >> 7;
+
+            uint16_t program_clock_reference_extension = two_bytes & 0x1ff;
+        }
+
+        if(OPCR_flag)
+        {
+            uint32_t four_bytes = read_4_bytes(p);
+            inc_ptr(p, 4);
+
+            uint16_t two_bytes = read_2_bytes(p);
+            inc_ptr(p, 2);
+
+            uint64_t original_program_clock_reference_base = four_bytes;
+            original_program_clock_reference_base <<= 1;
+            original_program_clock_reference_base |= (two_bytes & 0x80) >> 7;
+
+            uint16_t original_program_clock_reference_extension = two_bytes & 0x1ff;
+        }
+
+        if(splicing_point_flag)
+        {
+            uint8_t splice_countdown = *p;
+            inc_ptr(p, 1);
+        }
+
+        if(transport_private_data_flag)
+        {
+            uint8_t transport_private_data_length = *p;
+            inc_ptr(p, 1);
+
+            for(unsigned int i = 0; i < transport_private_data_length; i++)
+                p++;
+        }
+
+        if(adaptation_field_extension_flag)
+        {
+            uint8_t adaptation_field_extension_length = *p;
+            inc_ptr(p, 1);
+
+            uint8_t *pAdapatationFieldExtensionStart = p;
+
+            uint8_t byte = *p;
+            inc_ptr(p, 1);
+
+            uint8_t ltw_flag = (byte & 0x80) >> 7;
+            uint8_t piecewise_rate_flag = (byte & 0x40) >> 6;
+            uint8_t seamless_splice_flag = (byte & 0x20) >> 5;
+
+            if(ltw_flag)
+            {
+                uint16_t two_bytes = read_2_bytes(p);
+                inc_ptr(p, 2);
+
+                uint8_t ltw_valid_flag = (two_bytes & 0x8000) >> 15;
+                uint16_t ltw_offset = two_bytes & 0x7fff;
+            }
+
+            if(piecewise_rate_flag)
+            {
+                uint16_t two_bytes = read_2_bytes(p);
+                inc_ptr(p, 2);
+
+                uint32_t piecewise_rate = two_bytes & 0x3fffff;
+            }
+
+            if(seamless_splice_flag)
+            {
+                uint32_t byte = *p;
+                inc_ptr(p, 1);
+
+                uint32_t DTS_next_AU;
+                uint8_t splice_type = (byte & 0xf0) >> 4;
+                DTS_next_AU = (byte & 0xe) << 28;
+
+                uint32_t two_bytes = read_2_bytes(p);
+                inc_ptr(p, 2);
+
+                DTS_next_AU |= (two_bytes & 0xfe) << 13;
+
+                two_bytes = read_2_bytes(p);
+                inc_ptr(p, 2);
+
+                DTS_next_AU |= (two_bytes & 0xfe) >> 1;
+            }
+
+            unsigned int N = adaptation_field_extension_length - (p - pAdapatationFieldExtensionStart);
+            for(unsigned int i = 0; i < N; i++)
+                p++; // reserved
+        }
+
+        unsigned int N = adaptation_field_length - (p - pAdapatationFieldStart);
+        for(unsigned int i = 0; i < N; i++)
+            p++; // stuffing_byte
+    }
+
+    return adaptation_field_length;
+}
+
 // Get the PID and other info
 int16_t process_packet(uint8_t *packet, size_t packetNum)
 {
@@ -1151,6 +1320,8 @@ int16_t process_packet(uint8_t *packet, size_t packetNum)
 
     PID &= 0x1FFF;
 
+    uint8_t adaptation_field_control = 1;
+
     if(false == g_b_terse)
     {
         printf_xml(2, "<pid>0x%x</pid>\n", PID);
@@ -1161,12 +1332,8 @@ int16_t process_packet(uint8_t *packet, size_t packetNum)
         inc_ptr(p, 1);
 
         uint8_t transport_scrambling_control = (final_byte & 0xC0) >> 6;
-        uint8_t adaptation_field_control = (final_byte & 0x30) >> 4;
+        adaptation_field_control = (final_byte & 0x30) >> 4;
         uint8_t continuity_counter = (final_byte & 0x0F) >> 4;
-
-        if (0x2 == adaptation_field_control ||
-            0x3 == adaptation_field_control)
-            assert(1);
 
         printf_xml(2, "<transport_error_indicator>0x%x</transport_error_indicator>\n", transport_error_indicator);
         printf_xml(2, "<transport_priority>0x%x</transport_priority>\n", transport_priority);
@@ -1176,6 +1343,16 @@ int16_t process_packet(uint8_t *packet, size_t packetNum)
     }
     else
         inc_ptr(p, 1);
+
+    uint8_t adaptation_field_length = 0;
+
+    if(2 == adaptation_field_control ||
+       3 == adaptation_field_control)
+    {
+        adaptation_field_length = process_adaptation_field(2, p);
+    }
+
+    uint8_t data_length = 184 - adaptation_field_length;
 
     ret = process_pid(PID, p, packetStart, packetNum, 1 == payload_unit_start_indicator);
 
@@ -1190,6 +1367,8 @@ process_packet_error:
 // It all starts here
 int main(int argc, char* argv[])
 {
+    tinyxml2::XMLDocument* doc = new tinyxml2::XMLDocument();
+
     if (0 == argc)
     {
         fprintf(stderr, "%s: Output extensive xml representation of MP2TS file to stdout\n", argv[0]);
@@ -1288,6 +1467,10 @@ int main(int argc, char* argv[])
     // Read each 188 byte packet and process the packet
 	packet_buffer_size = fread(packet_buffer, 1, read_block_size, f);
     packet = packet_buffer;
+
+//    printf_xml(doc, "file", "");
+//    printf_xml(doc, "name", "foo");
+//    printf_xml(doc, "/file", "");
 
     printf_xml(0, "<?xml version = \"1.0\" encoding = \"UTF-8\"?>\n");
     printf_xml(0, "<file>\n");
