@@ -107,6 +107,15 @@ enum eStreamType
     ePrivate_ES_VC1                             = 0xea
 };
 
+enum eExtensionType
+{
+    sequence_extension = 0,
+    extension_and_user_data_0,
+    extension_and_user_data_1,
+    extension_and_user_data_2,
+    num_extension_types
+};
+
 struct pid_entry_type
 {
     std::string pid_name;
@@ -143,6 +152,7 @@ int16_t g_network_pid = 0x0010; // default value
 int16_t g_scte35_pid = -1;
 size_t g_ptr_position = 0;
 unsigned int g_packet_size = 0;
+eExtensionType g_current_mpeg2_extension_type = sequence_extension;
 
 #define WINDOW_WIDTH 1200
 #define WINDOW_HEIGHT 600
@@ -1313,12 +1323,8 @@ size_t process_mpeg2_sequence_header(uint8_t *&p)
 
     uint32_t horizontal_size_value = (four_bytes & 0xFFF00000) >> 20;
     uint32_t vertical_size_value = (four_bytes & 0x000FFF00) >> 8;
-
-    uint8_t byte = *p;
-    inc_ptr(p, 1);
-
-    uint8_t aspect_ratio_information = (byte & 0xF0) >> 4;
-    uint8_t frame_rate_code = byte & 0x0F;
+    uint8_t aspect_ratio_information = (four_bytes & 0xF0) >> 4;
+    uint8_t frame_rate_code = four_bytes & 0x0F;
 
     four_bytes = read_4_bytes(p);
     inc_ptr(p, 4);
@@ -1345,54 +1351,95 @@ size_t process_mpeg2_sequence_header(uint8_t *&p)
     if(load_non_intra_quantizer_matrix)
         inc_ptr(p, 64);
 
+    g_current_mpeg2_extension_type = sequence_extension;
+
+    return p - pStart;
+}
+
+/*
+enum eExtensionType
+{
+    sequence_extension = 0,
+    extension_and_user_data_0,
+    extension_and_user_data_1,
+    extension_and_user_data_2,
+    unknown_extension
+};
+*/
+
+// MPEG2 spec, 13818-2, 6.2.2.2.1
+size_t process_mpeg2_extension(uint8_t *&p)
+{
+    uint8_t *pStart = p;
+
+    switch(g_current_mpeg2_extension_type)
+    {
+        case sequence_extension:
+        break;
+        
+        case extension_and_user_data_0:
+        break;
+
+        case extension_and_user_data_1:
+        break;
+
+        case extension_and_user_data_2:
+        break;
+    }
+
     return p - pStart;
 }
 
 size_t process_mpeg2_video_PES(uint8_t *&p, size_t PES_packet_data_length)
 {
     uint8_t *pStart = p;
+    size_t bytes_processed = 0;
 
-    uint32_t start_code = read_4_bytes(p);
-    inc_ptr(p, 4);
-
-    uint32_t start_code_prefix = (start_code & 0xFFFFFF00) >> 8;
-
-    assert(0x000001 == start_code_prefix);
-
-    start_code &= 0x000000FF;
-    switch(start_code)
+    while(bytes_processed < PES_packet_data_length)
     {
-        case picture_start_code:
-        break;
+        uint32_t start_code = read_4_bytes(p);
+        inc_ptr(p, 4);
 
-        case user_data_start_code:
-        break;
+        uint32_t start_code_prefix = (start_code & 0xFFFFFF00) >> 8;
 
-        case sequence_header_code:
-            process_mpeg2_sequence_header(p);
-        break;
+        assert(0x000001 == start_code_prefix);
 
-        case sequence_error_code:
-        break;
-
-        case extension_start_code:
-        break;
-
-        case sequence_end_code:
-        break;
-
-        case group_start_code:
-        break;
-
-        default:
+        start_code &= 0x000000FF;
+        switch(start_code)
         {
-            if(start_code >= slice_start_codes_begin &&
-               start_code <= slice_start_codes_end)
+            case picture_start_code:
+            break;
+
+            case user_data_start_code:
+            break;
+
+            case sequence_header_code:
+                bytes_processed += process_mpeg2_sequence_header(p);
+            break;
+
+            case sequence_error_code:
+            break;
+
+            case extension_start_code:
+                bytes_processed += process_mpeg2_extension(p);
+            break;
+
+            case sequence_end_code:
+            break;
+
+            case group_start_code:
+            break;
+
+            default:
             {
-            }
-            else if(start_code >= system_start_codes_begin &&
-                    start_code <= system_start_codes_end)
-            {
+                if(start_code >= slice_start_codes_begin &&
+                   start_code <= slice_start_codes_end)
+                {
+                }
+                else if(start_code >= system_start_codes_begin &&
+                        start_code <= system_start_codes_end)
+                {
+                }
             }
         }
     }
