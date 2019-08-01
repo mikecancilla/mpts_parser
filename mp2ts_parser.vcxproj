@@ -21,6 +21,10 @@
   <ItemGroup>
     <ClCompile Include="mp2ts_parser.cpp" />
     <ClCompile Include="third_party\tinyxml2\tinyxml2.cpp" />
+    <ClCompile Include="utils.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="utils.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{09719020-39D0-47D3-8873-FF87BECA634E}</ProjectGuid>

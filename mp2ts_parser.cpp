@@ -60,8 +60,7 @@ Value	StreamType	                        Value	StreamType
 #include <vector>
 #include <map>
 #include "tinyxml2.h"
-
-#define READ_2_BYTES(p) *p | (*(p+1) << 8); p+=2;
+#include "utils.h"
 
 // Forward function definitions
 size_t read_descriptors(uint8_t *p, uint16_t program_info_length);
@@ -107,7 +106,7 @@ enum eStreamType
     ePrivate_ES_VC1                             = 0xea
 };
 
-enum eExtensionType
+enum eMpeg2ExtensionType
 {
     sequence_extension = 0,
     extension_and_user_data_0,
@@ -152,7 +151,7 @@ int16_t g_network_pid = 0x0010; // default value
 int16_t g_scte35_pid = -1;
 size_t g_ptr_position = 0;
 unsigned int g_packet_size = 0;
-eExtensionType g_current_mpeg2_extension_type = sequence_extension;
+eMpeg2ExtensionType g_current_mpeg2_extension_type = sequence_extension;
 
 #define WINDOW_WIDTH 1200
 #define WINDOW_HEIGHT 600
@@ -190,7 +189,7 @@ eExtensionType g_current_mpeg2_extension_type = sequence_extension;
 //#define 36 - 63 n / a n / a ITU - T Rec.H.222.0 | ISO / IEC 13818 - 1 Reserved
 //#define 64 - 255 n / a n / a User Private
 
-void inline my_printf(const char *format, ...)
+static void inline my_printf(const char *format, ...)
 {
     if(g_b_debug)
     {
@@ -200,7 +199,7 @@ void inline my_printf(const char *format, ...)
     }
 }
 
-void inline printf_xml(tinyxml2::XMLDocument *doc, const char *elementName, const char *elementText)
+static void inline printf_xml(tinyxml2::XMLDocument *doc, const char *elementName, const char *elementText)
 {
     if(elementText)
     {
@@ -221,7 +220,7 @@ void inline printf_xml(tinyxml2::XMLDocument *doc, const char *elementName, cons
     doc->Print();
 }
 
-void inline printf_xml(unsigned int indent_level, const char *format, ...)
+static void inline printf_xml(unsigned int indent_level, const char *format, ...)
 {
     if(g_b_xml && format)
     {
@@ -239,14 +238,13 @@ void inline printf_xml(unsigned int indent_level, const char *format, ...)
     }
 }
 
-void inline inc_ptr(uint8_t *&p, size_t bytes)
+static void inline inc_ptr(uint8_t *&p, size_t bytes)
 {
-    p += bytes;
-    g_ptr_position += bytes;
+    g_ptr_position += increment_ptr(p, bytes);
 }
 
 // Initialize a map of ID to string type
-void init_stream_types()
+static void init_stream_types()
 {
     g_stream_map[0x0] = "Reserved";	                            
     g_stream_map[0x1] = "MPEG-1 Video";
@@ -286,35 +284,12 @@ void init_stream_types()
     g_stream_map[0xea] = "Private ES(VC-1)";
 }
 
-inline uint16_t read_2_bytes(uint8_t *p)
-{
-	uint16_t ret = *p++;
-	ret <<= 8;
-	ret |= *p++;
-
-	return ret;
-}
-
-inline uint32_t read_4_bytes(uint8_t *p)
-{
-    uint32_t ret = 0;
-    uint32_t val = *p++;
-    ret = val<<24;
-    val = *p++;
-    ret |= val << 16;
-    val = *p++;
-    ret |= val << 8;
-    ret |= *p;
-
-    return ret;
-}
-
 // 2.4.4.3 Program association Table
 //
 // The Program Association Table provides the correspondence between a program_number and the PID value of the
 // Transport Stream packets which carry the program definition.The program_number is the numeric label associated with
 // a program.
-int16_t read_pat(uint8_t *&p, bool payload_unit_start)
+static int16_t read_pat(uint8_t *&p, bool payload_unit_start)
 {
     uint8_t payload_start_offset = 0;
 
@@ -400,7 +375,7 @@ int16_t read_pat(uint8_t *&p, bool payload_unit_start)
 // The Program Map Table provides the mappings between program numbers and the program elements that comprise
 // them.A single instance of such a mapping is referred to as a "program definition".The program map table is the
 // complete collection of all program definitions for a Transport Stream.
-int16_t read_pmt(uint8_t *&p, bool payload_unit_start)
+static int16_t read_pmt(uint8_t *&p, bool payload_unit_start)
 {
     uint8_t payload_start_offset = 0;
 
@@ -508,7 +483,7 @@ int16_t read_pmt(uint8_t *&p, bool payload_unit_start)
 // Program and program element descriptors are structures which may be used to extend the definitions of programs and
 // program elements.All descriptors have a format which begins with an 8 - bit tag value.The tag value is followed by an
 // 8 - bit descriptor length and data fields.
-size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
+static size_t read_descriptors(uint8_t *p, uint16_t program_info_length)
 {
     uint32_t descriptor_number = 0;
     uint8_t descriptor_length = 0;
@@ -1038,7 +1013,7 @@ enum eStreamID
     program_stream_directory = 0xFF
 };
 
-uint32_t read_time_stamp(uint8_t *&p)
+static uint32_t read_time_stamp(uint8_t *&p)
 {
     uint32_t byte = *p;
     inc_ptr(p, 1);
@@ -1058,7 +1033,7 @@ uint32_t read_time_stamp(uint8_t *&p)
     return time_stamp;
 }
 
-size_t process_PES_packet_header(uint8_t *&p)
+static size_t process_PES_packet_header(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
@@ -1356,17 +1331,6 @@ size_t process_mpeg2_sequence_header(uint8_t *&p)
     return p - pStart;
 }
 
-/*
-enum eExtensionType
-{
-    sequence_extension = 0,
-    extension_and_user_data_0,
-    extension_and_user_data_1,
-    extension_and_user_data_2,
-    unknown_extension
-};
-*/
-
 // MPEG2 spec, 13818-2, 6.2.2.2.1
 size_t process_mpeg2_extension(uint8_t *&p)
 {
@@ -1447,7 +1411,7 @@ size_t process_mpeg2_video_PES(uint8_t *&p, size_t PES_packet_data_length)
     return p - pStart;
 }
 
-size_t process_PES_packet(uint8_t *&p, int64_t packet_start, eStreamType stream_type, bool payload_unit_start)
+static size_t process_PES_packet(uint8_t *&p, int64_t packet_start, eStreamType stream_type, bool payload_unit_start)
 {
     if(false == payload_unit_start)
     {
@@ -1545,7 +1509,7 @@ size_t process_PES_packet(uint8_t *&p, int64_t packet_start, eStreamType stream_
 }
 
 // Process each PID for each 188 byte packet
-int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start, size_t packet_num, bool payload_unit_start)
+static int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start, size_t packet_num, bool payload_unit_start)
 {
     if(pid == 0x00)
     {
@@ -1684,7 +1648,7 @@ int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start, size_t pack
     return 0;
 }
 
-uint8_t process_adaptation_field(unsigned int indent, uint8_t *&p)
+static uint8_t process_adaptation_field(unsigned int indent, uint8_t *&p)
 {
     uint8_t adaptation_field_length = *p;
     inc_ptr(p, 1);
@@ -1815,7 +1779,7 @@ uint8_t process_adaptation_field(unsigned int indent, uint8_t *&p)
 }
 
 // Get the PID and other info
-int16_t process_packet(uint8_t *packet, size_t packetNum)
+static int16_t process_packet(uint8_t *packet, size_t packetNum)
 {
     uint8_t *p = NULL;
     int16_t ret = -1;
