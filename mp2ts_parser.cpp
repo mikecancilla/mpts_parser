@@ -124,12 +124,12 @@ struct pid_entry_type
 typedef std::vector<pid_entry_type> pid_list_type;
 
 // Global definitions
-pid_list_type                   g_video_pid_list;
-pid_list_type                   g_audio_pid_list;
+pid_list_type g_video_pid_list;
+pid_list_type g_audio_pid_list;
 
-std::map <uint16_t, char *>     g_stream_map; // ID, name
-std::map <uint16_t, char *>     g_pid_map; // ID, name
-std::map <uint16_t, uint16_t>   g_pid_to_type_map; // PID, stream type
+std::map <uint16_t, char *>      g_stream_map; // ID, name
+std::map <uint16_t, char *>      g_pid_map; // ID, name
+std::map <uint16_t, eStreamType> g_pid_to_type_map; // PID, stream type
 
 bool g_b_xml =      true;
 bool g_b_progress = false;
@@ -141,7 +141,8 @@ int16_t g_program_number = -1;
 int16_t g_program_map_pid = -1;
 int16_t g_network_pid = 0x0010; // default value
 int16_t g_scte35_pid = -1;
-int64_t g_ptr_position = 0;
+size_t g_ptr_position = 0;
+unsigned int g_packet_size = 0;
 
 #define WINDOW_WIDTH 1200
 #define WINDOW_HEIGHT 600
@@ -228,7 +229,7 @@ void inline printf_xml(unsigned int indent_level, const char *format, ...)
     }
 }
 
-void inline inc_ptr(uint8_t *&p, int bytes)
+void inline inc_ptr(uint8_t *&p, size_t bytes)
 {
     p += bytes;
     g_ptr_position += bytes;
@@ -474,7 +475,7 @@ int16_t read_pmt(uint8_t *&p, bool payload_unit_start)
             g_scte35_pid = elementary_pid;
 
         g_pid_map[elementary_pid] = g_stream_map[stream_type];
-        g_pid_to_type_map[elementary_pid] = stream_type;
+        g_pid_to_type_map[elementary_pid] = (eStreamType) stream_type;
 
         my_printf("    %d) pid:%x, stream_type:%x (%s)\n", stream_count++, elementary_pid, stream_type, g_stream_map[stream_type]);
 
@@ -1001,22 +1002,503 @@ struct Frame
     {}
 };
 
-uint8_t process_PES_packet(uint8_t *&p)
+enum eStreamID
 {
+    program_stream_map = 0xBC,
+    private_stream_1 = 0xBD,
+    padding_stream = 0xBE,
+    private_stream_2 = 0xBF,
+    // 110x xxxx = 0xCxxxx, 0xDxxxx = ISO/IEC 13818-3 or ISO/IEC 11172-3 or ISO/IEC 13818-7 or ISO/IEC 14496-3 audio stream number x xxxx
+    // 1110 xxxx = 0xExxxx = ITU-T Rec. H.262 | ISO/IEC 13818-2, ISO/IEC 11172-2, ISO/IEC 14496-2 or ITU-T Rec. H.264 | ISO/IEC 14496-10 video stream number xxxx
+    ECM_stream = 0xF0,
+    EMM_stream = 0xF1,
+    DSMCC_stream = 0xF2,                // ITU-T Rec. H.222.0 | ISO/IEC 13818-1 Annex A or ISO/IEC 13818-6_DSMCC_stream
+    iso_13522_stream = 0xF3,            // ISO/IEC_13522_stream
+    itu_h222_a_stream = 0xF4,           // ITU-T Rec. H.222.1 type A
+    itu_h222_b_stream = 0xF5,           // ITU-T Rec. H.222.1 type B
+    itu_h222_c_stream = 0xF6,           // ITU-T Rec. H.222.1 type C
+    itu_h222_d_stream = 0xF7,           // ITU-T Rec. H.222.1 type D
+    itu_h222_e_stream = 0xF8,           // ITU-T Rec. H.222.1 type E
+    ancillary_stream = 0xF9,
+    iso_14496_1_sl_stream = 0xFA,       // ISO/IEC 14496-1_SL-packetized_stream
+    iso_14496_1_flex_mux_stream = 0xFB, // ISO/IEC 14496-1_SL-packetized_stream
+    metadata_stream = 0xFC,
+    extended_stream_id = 0xFD,
+    reserved_data_stream = 0xFE,
+    program_stream_directory = 0xFF
+};
+
+uint32_t read_time_stamp(uint8_t *&p)
+{
+    uint32_t byte = *p;
+    inc_ptr(p, 1);
+
+    uint32_t time_stamp = (byte & 0x0E) << 28;
+
+    uint32_t two_bytes = read_2_bytes(p);
+    inc_ptr(p, 2);
+
+    time_stamp |= (two_bytes & 0xFFFE) << 13;
+
+    two_bytes = read_2_bytes(p);
+    inc_ptr(p, 2);
+
+    time_stamp |= (two_bytes & 0xFFFE) >> 1;
+
+    return time_stamp;
+}
+
+size_t process_PES_packet_header(uint8_t *&p)
+{
+    uint8_t *pStart = p;
+
+    uint8_t byte = *p;
+    inc_ptr(p, 1);
+
+    uint8_t PES_scrambling_control = (byte & 0x30) >> 4;
+    uint8_t PES_priority = (byte & 0x08) >> 3;
+    uint8_t data_alignment_indicator = (byte & 0x04) >> 2;
+    uint8_t copyright = (byte & 0x02) >> 1;
+    uint8_t original_or_copy = byte & 0x01;
+
+    byte = *p;
+    inc_ptr(p, 1);
+
+    uint8_t PTS_DTS_flags = (byte & 0xC0) >> 6;
+    uint8_t ESCR_flag = (byte & 0x20) >> 5;
+    uint8_t ES_rate_flag = (byte & 0x10) >> 4;
+    uint8_t DSM_trick_mode_flag = (byte & 0x08) >> 3;
+    uint8_t additional_copy_info_flag = (byte & 0x04) >> 2;
+    uint8_t PES_CRC_flag = (byte & 0x02) >> 1;
+    uint8_t PES_extension_flag = byte & 0x01;
+
+    /*
+        PES_header_data_length – An 8-bit field specifying the total number of bytes occupied by the optional fields and any
+        stuffing bytes contained in this PES packet header. The presence of optional fields is indicated in the byte that precedes
+        the PES_header_data_length field.
+    */
+    uint8_t PES_header_data_length = *p;
+    inc_ptr(p, 1);
+
+    if(2 == PTS_DTS_flags)
+    {
+        uint32_t PTS = read_time_stamp(p);
+    }
+
+    if(3 == PTS_DTS_flags)
+    {
+        uint32_t PTS = read_time_stamp(p);
+        uint32_t DTS = read_time_stamp(p);
+    }
+
+    if(ESCR_flag) // 6 bytes
+    {
+        uint32_t byte = *p;
+        inc_ptr(p, 1);
+
+        // 31, 31, 30
+        uint32_t ESCR = (byte & 0x38) << 27;
+
+        // 29, 28
+        ESCR |= (byte & 0x03) << 29;
+
+        byte = *p;
+        inc_ptr(p, 1);
+
+        // 27, 26, 25, 24, 23, 22, 21, 20
+        ESCR |= byte << 19;
+
+        byte = *p;
+        inc_ptr(p, 1);
+
+        // 19, 18, 17, 16, 15
+        ESCR |= (byte & 0xF8) << 11;
+
+        // 14, 13
+        ESCR |= (byte & 0x03) << 13;
+
+        byte = *p;
+        inc_ptr(p, 1);
+
+        // 12, 11, 10, 9, 8, 7, 6, 5
+        ESCR |= byte << 4;
+
+        byte = *p;
+        inc_ptr(p, 1);
+
+        // 4, 3, 2, 1, 0
+        ESCR |= (byte & 0xF8) >> 3;
+
+        uint32_t ESCR_ext = (byte & 0x03) << 7;
+
+        byte = *p;
+        inc_ptr(p, 1);
+
+        ESCR_ext |= (byte & 0xFE) >> 1;
+    }
+
+    if(ES_rate_flag)
+    {
+        uint32_t four_bytes = *p;
+        inc_ptr(p, 1);
+        four_bytes <<= 8;
+
+        four_bytes |= *p;
+        inc_ptr(p, 1);
+        four_bytes <<= 8;
+
+        four_bytes |= *p;
+        inc_ptr(p, 1);
+        four_bytes <<= 8;
+
+        uint32_t ES_rate = (four_bytes & 0x7FFFFE) >> 1;
+    }
+
+    if(DSM_trick_mode_flag)
+    {
+        // Table 2-24 – Trick mode control values
+        // Value Description
+        // '000' Fast forward
+        // '001' Slow motion
+        // '010' Freeze frame
+        // '011' Fast reverse
+        // '100' Slow reverse
+        // '101'-'111' Reserved
+
+        uint8_t byte = *p;
+        inc_ptr(p, 1);
+
+        uint8_t trick_mode_control = byte >> 5;
+
+        if(0 == trick_mode_control) // Fast forward
+        {
+            uint8_t field_id = (byte & 0x18) >> 3;
+            uint8_t intra_slice_refresh = (byte & 0x04) >> 2;
+            uint8_t frequency_truncation = byte & 0x03;
+        }
+        else if(1 == trick_mode_control) // Slow motion
+        {
+            uint8_t rep_cntrl = byte & 0x1f;
+        }
+        else if(2 == trick_mode_control) // Freeze frame
+        {
+            uint8_t field_id = (byte & 0x18) >> 3;
+        }
+        else if(3 == trick_mode_control) // Fast reverse
+        {
+            uint8_t field_id = (byte & 0x18) >> 3;
+            uint8_t intra_slice_refresh = (byte & 0x04) >> 2;
+            uint8_t frequency_truncation = byte & 0x03;
+        }
+        else if(4 == trick_mode_control) // Slow reverse
+        {
+            uint8_t rep_cntrl = byte & 0x1f;
+        }
+    }
+
+    if(additional_copy_info_flag)
+    {
+        uint8_t byte = *p;
+        inc_ptr(p, 1);
+
+        uint8_t additional_copy_info = byte & 0x7F;
+    }
+
+    if(PES_CRC_flag)
+    {
+        uint16_t previous_PES_packet_CRC = read_2_bytes(p);
+        inc_ptr(p, 2);
+    }
+
+    if(PES_extension_flag)
+    {
+        uint8_t byte = *p;
+        inc_ptr(p, 1);
+
+        uint8_t PES_private_data_flag = (byte & 0x80) >> 7;
+        uint8_t pack_header_field_flag = (byte & 0x40) >> 6;
+        uint8_t program_packet_sequence_counter_flag = (byte & 0x20) >> 5;
+        uint8_t P_STD_buffer_flag = (byte & 0x10) >> 4;
+        // 3 bits Reserved
+        uint8_t PES_extension_flag_2 = byte & 0x01;
+
+        if(PES_private_data_flag)
+        {
+            uint8_t PES_private_data[16];
+            memcpy(PES_private_data, p, 16);
+            inc_ptr(p, 16);
+        }
+
+        if(pack_header_field_flag)
+        {
+            uint8_t pack_field_length = *p;
+            inc_ptr(p, 1);
+
+            // pack_header is here
+            // http://stnsoft.com/DVD/packhdr.html
+
+            inc_ptr(p, pack_field_length);
+        }
+
+        if(program_packet_sequence_counter_flag)
+        {
+            uint8_t byte = *p;
+            inc_ptr(p, 1);
+
+            uint8_t program_packet_sequence_counter = byte & 0x07F;
+
+            byte = *p;
+            inc_ptr(p, 1);
+
+            uint8_t MPEG1_MPEG2_identifier = (byte & 0x40) >> 6;
+        }
+
+        if(P_STD_buffer_flag)
+        {
+            uint16_t two_bytes = read_2_bytes(p);
+            inc_ptr(p, 2);
+
+            uint8_t P_STD_buffer_scale = (two_bytes & 0x2000) >> 13;
+            uint8_t P_STD_buffer_size = two_bytes & 0x1FFF;
+        }
+
+        if(PES_extension_flag_2)
+        {
+            uint8_t byte = *p;
+            inc_ptr(p, 1);
+
+            uint8_t PES_extension_field_length = byte & 0x7F;
+
+            byte = *p;
+            inc_ptr(p, 1);
+
+            uint8_t stream_id_extension_flag = (byte & 0x80) >> 7;
+
+            if(0 == stream_id_extension_flag)
+            {
+                uint8_t stream_id_extension = byte & 0x7F;
+
+                // Reserved
+
+                inc_ptr(p, PES_extension_field_length);
+            }
+        }
+    }
+
+    return p - pStart;
+}
+
+enum eMpeg2StartCode
+{
+    picture_start_code = 0,
+    slice_start_codes_begin = 1,
+    slice_start_codes_end = 0xAF,
+    user_data_start_code = 0xB2,
+    sequence_header_code = 0xB3,
+    sequence_error_code = 0xB4,
+    extension_start_code = 0xB5,
+    sequence_end_code = 0xB7,
+    group_start_code = 0xB8,
+    system_start_codes_begin = 0xB9,
+    system_start_codes_end = 0xFF
+};
+
+// MPEG2 spec, 13818-2, 6.2.2.1
+size_t process_mpeg2_sequence_header(uint8_t *&p)
+{
+    uint8_t *pStart = p;
+
+    uint32_t four_bytes = read_4_bytes(p);
+    inc_ptr(p, 4);
+
+    uint32_t horizontal_size_value = (four_bytes & 0xFFF00000) >> 20;
+    uint32_t vertical_size_value = (four_bytes & 0x000FFF00) >> 8;
+
+    uint8_t byte = *p;
+    inc_ptr(p, 1);
+
+    uint8_t aspect_ratio_information = (byte & 0xF0) >> 4;
+    uint8_t frame_rate_code = byte & 0x0F;
+
+    four_bytes = read_4_bytes(p);
+    inc_ptr(p, 4);
+
+    // At this point p is one bit in to the intra_quantizer_matrix
+
+    uint32_t bit_rate_value = (four_bytes & 0xFFFFC000) >> 14;
+    uint16_t vbv_buffer_size_value = (four_bytes & 0x1FF8) >> 3;
+    uint8_t constrained_parameters_flag = (four_bytes & 0x4) >> 2;
+    uint8_t load_intra_quantizer_matrix = (four_bytes & 0x2) >> 1;
+
+    uint8_t load_non_intra_quantizer_matrix = 0;
+
+    if(load_intra_quantizer_matrix)
+    {
+        inc_ptr(p, 63);
+        load_non_intra_quantizer_matrix = *p;
+        inc_ptr(p, 1);
+        load_non_intra_quantizer_matrix &= 0x1;
+    }
+    else
+        load_non_intra_quantizer_matrix = four_bytes & 0x1;
+
+    if(load_non_intra_quantizer_matrix)
+        inc_ptr(p, 64);
+
+    return p - pStart;
+}
+
+size_t process_mpeg2_video_PES(uint8_t *&p, size_t PES_packet_data_length)
+{
+    uint8_t *pStart = p;
+
+    uint32_t start_code = read_4_bytes(p);
+    inc_ptr(p, 4);
+
+    uint32_t start_code_prefix = (start_code & 0xFFFFFF00) >> 8;
+
+    assert(0x000001 == start_code_prefix);
+
+    start_code &= 0x000000FF;
+    switch(start_code)
+    {
+        case picture_start_code:
+        break;
+
+        case user_data_start_code:
+        break;
+
+        case sequence_header_code:
+            process_mpeg2_sequence_header(p);
+        break;
+
+        case sequence_error_code:
+        break;
+
+        case extension_start_code:
+        break;
+
+        case sequence_end_code:
+        break;
+
+        case group_start_code:
+        break;
+
+        default:
+        {
+            if(start_code >= slice_start_codes_begin &&
+               start_code <= slice_start_codes_end)
+            {
+            }
+            else if(start_code >= system_start_codes_begin &&
+                    start_code <= system_start_codes_end)
+            {
+            }
+        }
+    }
+
+    return p - pStart;
+}
+
+size_t process_PES_packet(uint8_t *&p, int64_t packet_start, eStreamType stream_type, bool payload_unit_start)
+{
+    if(false == payload_unit_start)
+    {
+        size_t PES_packet_length = g_packet_size - (g_ptr_position - packet_start);
+        inc_ptr(p, PES_packet_length);
+        return PES_packet_length;
+    }
+
     uint32_t four_bytes = read_4_bytes(p);
     inc_ptr(p, 4);
 
     uint32_t packet_start_code_prefix = (four_bytes & 0xffffff00) >> 8;
     uint8_t stream_id = four_bytes & 0xff;
 
-    uint16_t PES_packet_length = read_2_bytes(p);
+    /* 2.4.3.7
+      PES_packet_length – A 16-bit field specifying the number of bytes in the PES packet following the last byte of the field.
+      A value of 0 indicates that the PES packet length is neither specified nor bounded and is allowed only in
+      PES packets whose payload consists of bytes from a video elementary stream contained in Transport Stream packets.
+    */
+
+    int64_t PES_packet_length = read_2_bytes(p);
     inc_ptr(p, 2);
+
+    if(0 == PES_packet_length)
+        PES_packet_length = g_packet_size - (g_ptr_position - packet_start);
+
+    if (stream_id != program_stream_map &&
+        stream_id != padding_stream &&
+        stream_id != private_stream_2 &&
+        stream_id != ECM_stream &&
+        stream_id != EMM_stream &&
+        stream_id != program_stream_directory &&
+        stream_id != DSMCC_stream &&
+        stream_id != itu_h222_e_stream)
+    {
+        size_t header_size = process_PES_packet_header(p);
+
+        /*
+            stuffing_byte – This is a fixed 8-bit value equal to '1111 1111' that can be inserted by the encoder, for example to meet
+            the requirements of the channel. It is discarded by the decoder. No more than 32 stuffing bytes shall be present in one
+            PES packet header.
+        */
+
+        while(*p == 0xFF)
+        {
+            p++;
+            inc_ptr(p,1);
+        }
+
+        /*
+            PES_packet_data_byte – PES_packet_data_bytes shall be contiguous bytes of data from the elementary stream
+            indicated by the packet's stream_id or PID. When the elementary stream data conforms to ITU-T
+            Rec. H.262 | ISO/IEC 13818-2 or ISO/IEC 13818-3, the PES_packet_data_bytes shall be byte aligned to the bytes of
+            this Recommendation | International Standard. The byte-order of the elementary stream shall be preserved. The number
+            of PES_packet_data_bytes, N, is specified by the PES_packet_length field. N shall be equal to the value indicated in the
+            PES_packet_length minus the number of bytes between the last byte of the PES_packet_length field and the first
+            PES_packet_data_byte.
+
+            In the case of a private_stream_1, private_stream_2, ECM_stream, or EMM_stream, the contents of the
+            PES_packet_data_byte field are user definable and will not be specified by ITU-T | ISO/IEC in the future.
+        */
+
+        // PES_packet_data here
+        size_t PES_packet_data_length = PES_packet_length - header_size;
+
+        if(eMPEG2_Video == stream_type)
+        {
+            process_mpeg2_video_PES(p, PES_packet_data_length);
+
+            inc_ptr(p, PES_packet_data_length);
+        }
+        else
+        {
+            inc_ptr(p, PES_packet_data_length);
+        }
+    }
+    else if (stream_id == program_stream_map ||
+             stream_id == private_stream_2 ||
+             stream_id == ECM_stream ||
+             stream_id == EMM_stream ||
+             stream_id == program_stream_directory ||
+             stream_id == DSMCC_stream ||
+             stream_id == itu_h222_e_stream)
+    {
+        // PES_packet_data here
+        inc_ptr(p, PES_packet_length);
+    }
+    else if (stream_id == padding_stream)
+    {
+        // Padding bytes here
+        inc_ptr(p, PES_packet_length);
+    }
 
     return PES_packet_length;
 }
 
 // Process each PID for each 188 byte packet
-int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packetStart, size_t packetNum, bool payload_unit_start)
+int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start, size_t packet_num, bool payload_unit_start)
 {
     if(pid == 0x00)
     {
@@ -1026,8 +1508,8 @@ int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packetStart, size_t packe
         {
             if(g_b_terse)
             {
-                printf_xml(1, "<packet start=\"%llu\">\n", packetStart);
-                printf_xml(2, "<number>%zd</number>\n", packetNum);
+                printf_xml(1, "<packet start=\"%llu\">\n", packet_start);
+                printf_xml(2, "<number>%zd</number>\n", packet_num);
                 printf_xml(2, "<pid>0x%x</pid>\n", pid);
                 printf_xml(2, "<payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payload_unit_start ? 1 : 0);
             }
@@ -1049,8 +1531,8 @@ int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packetStart, size_t packe
         {
             if(g_b_terse)
             {
-                printf_xml(1, "<packet start=\"%llu\">\n", packetStart);
-                printf_xml(2, "<number>%zd</number>\n", packetNum);
+                printf_xml(1, "<packet start=\"%llu\">\n", packet_start);
+                printf_xml(2, "<number>%zd</number>\n", packet_num);
                 printf_xml(2, "<pid>0x%x</pid>\n", pid);
                 printf_xml(2, "<payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payload_unit_start ? 1 : 0);
             }
@@ -1074,7 +1556,7 @@ int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packetStart, size_t packe
         }
         //else
 
-        process_PES_packet(p);
+        process_PES_packet(p, packet_start, g_pid_to_type_map[pid], payload_unit_start);
 
         {
             static Frame videoFrame;
@@ -1138,7 +1620,7 @@ int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packetStart, size_t packe
 
                 if(bNewSet)
                 {
-                    pid_entry_type p(g_pid_map[pid], 1, packetStart);
+                    pid_entry_type p(g_pid_map[pid], 1, packet_start);
                     p_frame->pidList.push_back(p);
                 }
                 else
@@ -1223,7 +1705,7 @@ uint8_t process_adaptation_field(unsigned int indent, uint8_t *&p)
 
         if(adaptation_field_extension_flag)
         {
-            uint8_t adaptation_field_extension_length = *p;
+            size_t adaptation_field_extension_length = *p;
             inc_ptr(p, 1);
 
             uint8_t *pAdapatationFieldExtensionStart = p;
@@ -1272,12 +1754,12 @@ uint8_t process_adaptation_field(unsigned int indent, uint8_t *&p)
                 DTS_next_AU |= (two_bytes & 0xfe) >> 1;
             }
 
-            unsigned int N = adaptation_field_extension_length - (p - pAdapatationFieldExtensionStart);
+            size_t N = adaptation_field_extension_length - (p - pAdapatationFieldExtensionStart);
             for(unsigned int i = 0; i < N; i++)
                 p++; // reserved
         }
 
-        unsigned int N = adaptation_field_length - (p - pAdapatationFieldStart);
+        size_t N = adaptation_field_length - (p - pAdapatationFieldStart);
         for(unsigned int i = 0; i < N; i++)
             p++; // stuffing_byte
     }
@@ -1290,7 +1772,7 @@ int16_t process_packet(uint8_t *packet, size_t packetNum)
 {
     uint8_t *p = NULL;
     int16_t ret = -1;
-    int64_t packetStart = g_ptr_position;
+    int64_t packet_start = g_ptr_position;
 
     if(false == g_b_terse)
     {
@@ -1344,6 +1826,14 @@ int16_t process_packet(uint8_t *packet, size_t packetNum)
     else
         inc_ptr(p, 1);
 
+    /*
+        Table 2-5 – Adaptation field control values
+            Value  Description
+             00    Reserved for future use by ISO/IEC
+             01    No adaptation_field, payload only
+             10    Adaptation_field only, no payload
+             11    Adaptation_field followed by payload
+    */
     uint8_t adaptation_field_length = 0;
 
     if(2 == adaptation_field_control ||
@@ -1354,7 +1844,10 @@ int16_t process_packet(uint8_t *packet, size_t packetNum)
 
     uint8_t data_length = 184 - adaptation_field_length;
 
-    ret = process_pid(PID, p, packetStart, packetNum, 1 == payload_unit_start_indicator);
+    if(2 != adaptation_field_control)
+        ret = process_pid(PID, p, packet_start, packetNum, 1 == payload_unit_start_indicator);
+    else
+        ret = adaptation_field_length;
 
 process_packet_error:
 
@@ -1436,12 +1929,10 @@ int main(int argc, char* argv[])
     uint8_t temp_buffer[5];
     fread(temp_buffer, 1, 5, f);
 
-    unsigned int packet_size = 0;
-
     if(0x47 == temp_buffer[0])
-        packet_size = 188;
+        g_packet_size = 188;
     else if(0x47 == temp_buffer[4])
-        packet_size = 192;
+        g_packet_size = 192;
     else
     {
         fprintf(stderr, "%s: Can't recognize the input file", argv[0]);
@@ -1451,8 +1942,8 @@ int main(int argc, char* argv[])
     // Go back to the beginning of the file
     fseek(f, 0L, SEEK_SET);
 
-    if(file_size > 10000*packet_size)
-        read_block_size = 10000*packet_size;
+    if(file_size > 10000*g_packet_size)
+        read_block_size = 10000*g_packet_size;
     else
         read_block_size = file_size;
 
@@ -1476,7 +1967,7 @@ int main(int argc, char* argv[])
     printf_xml(0, "<file>\n");
     printf_xml(1, "<name>%s</name>\n", argv[argc - 1]);
     printf_xml(1, "<file_size>%llu</file_size>\n", file_size);
-    printf_xml(1, "<packet_size>%d</packet_size>\n", packet_size);
+    printf_xml(1, "<packet_size>%d</packet_size>\n", g_packet_size);
     if(g_b_terse)
         printf_xml(1, "<terse>1</terse>\n");
     else
@@ -1490,7 +1981,7 @@ int main(int argc, char* argv[])
 	{
         int err = 0;
 
-        if(192 == packet_size)
+        if(192 == g_packet_size)
             err = process_packet(packet + 4, packet_num);
         else
             err = process_packet(packet, packet_num);
@@ -1498,7 +1989,7 @@ int main(int argc, char* argv[])
         if(0 != err)
             goto error;
 
-        total_read += packet_size;
+        total_read += g_packet_size;
         g_ptr_position = total_read;
 
         if(g_b_progress)
@@ -1518,7 +2009,7 @@ int main(int argc, char* argv[])
             packet = packet_buffer;
         }
         else
-            packet += packet_size;
+            packet += g_packet_size;
 
         assert(packet_buffer_size > 0);
 
