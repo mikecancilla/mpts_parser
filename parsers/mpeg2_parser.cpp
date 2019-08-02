@@ -1,30 +1,96 @@
+#include <cstdio>
 #include <cassert>
+#include <cstring> // memcpy
 #include "mpeg2_parser.h"
 #include "utils.h"
-
-extern size_t g_ptr_position;
 
 static e_mpeg2_extension_type g_next_mpeg2_extension_type = sequence_extension;
 
 static void inline inc_ptr(uint8_t *&p, size_t bytes)
 {
-    g_ptr_position += increment_ptr(p, bytes);
+    increment_ptr(p, bytes);
 }
 
-// MPEG2 spec, 13818-2, 6.2.2
-size_t mpeg2_process_video_PES(uint8_t *&p, size_t PES_packet_data_length)
+static size_t mpeg2_next_start_code(uint8_t *&p, size_t data_length = -1)
+{
+    size_t count = 0;
+    uint8_t *pStart = p;
+
+    while(    *p != 0 ||
+          *(p+1) != 0 ||
+          *(p+2) != 1 &&
+          count < data_length)
+    {
+        inc_ptr(p, 1);
+        count++;
+    }
+
+    if(-1 == count)
+        return count;
+
+    return p - pStart;
+}
+
+static inline size_t mpeg2_process_start_code(uint8_t *&p, e_mpeg2_start_code start_code)
+{
+    uint32_t four_bytes = read_4_bytes(p);
+    inc_ptr(p, 4);
+
+    uint32_t start_code_prefix = (four_bytes & 0xFFFFFF00) >> 8;
+    assert(0x000001 == start_code_prefix);
+
+    four_bytes &= 0x000000FF;
+    assert(four_bytes == start_code);
+
+    return 4;
+}
+
+static uint32_t read_time_stamp(uint8_t *&p)
+{
+    uint32_t byte = *p;
+    inc_ptr(p, 1);
+
+    uint32_t time_stamp = (byte & 0x0E) << 28;
+
+    uint32_t two_bytes = read_2_bytes(p);
+    inc_ptr(p, 2);
+
+    time_stamp |= (two_bytes & 0xFFFE) << 13;
+
+    two_bytes = read_2_bytes(p);
+    inc_ptr(p, 2);
+
+    time_stamp |= (two_bytes & 0xFFFE) >> 1;
+
+    return time_stamp;
+}
+
+size_t mpeg2_process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int how_many_frames)
 {
     uint8_t *pStart = p;
     size_t bytes_processed = 0;
+    bool bDone = false;
+    unsigned int frame_number = 0;
 
-    while(bytes_processed < PES_packet_data_length)
+    while(bytes_processed < PES_packet_data_length && !bDone)
     {
+RETRY:
         uint32_t start_code = read_4_bytes(p);
-        inc_ptr(p, 4);
-
         uint32_t start_code_prefix = (start_code & 0xFFFFFF00) >> 8;
 
-        assert(0x000001 == start_code_prefix);
+        if(0x000001 != start_code_prefix)
+        {
+            fprintf(stderr, "WARNING: Bad data found %llu bytes into this frame.  Searching for next start code...\n", bytes_processed);
+            size_t count = mpeg2_next_start_code(p, PES_packet_data_length);
+
+            if(-1 == count)
+            {
+                bDone = true;
+                continue;
+            }
+
+            goto RETRY;
+        }
 
         start_code &= 0x000000FF;
         switch(start_code)
@@ -42,6 +108,7 @@ size_t mpeg2_process_video_PES(uint8_t *&p, size_t PES_packet_data_length)
             break;
 
             case sequence_error_code:
+                bDone = true;
             break;
 
             case extension_start_code:
@@ -49,6 +116,7 @@ size_t mpeg2_process_video_PES(uint8_t *&p, size_t PES_packet_data_length)
             break;
 
             case sequence_end_code:
+                bDone = true;
             break;
 
             case group_start_code:
@@ -65,9 +133,302 @@ size_t mpeg2_process_video_PES(uint8_t *&p, size_t PES_packet_data_length)
                 else if(start_code >= system_start_codes_begin &&
                         start_code <= system_start_codes_end)
                 {
+                    if(frame_number == how_many_frames)
+                    {
+                        bDone = true;
+                    }
+                    else
+                    {
+                        bytes_processed += mpeg2_process_PES_packet_header(p);
+                        frame_number++;
+                    }
                 }
             }
         }
+    }
+
+    return p - pStart;
+}
+
+// MPEG2 spec, 13818-2, 6.2.2
+size_t mpeg2_process_video_PES(uint8_t *p, size_t PES_packet_data_length)
+{
+    uint8_t *pStart = p;
+    size_t bytes_processed = 0;
+    bool bDone = false;
+
+    while(bytes_processed < PES_packet_data_length && !bDone)
+    {
+        bytes_processed += mpeg2_process_video_frames(p, PES_packet_data_length, 1);
+    }
+
+    return p - pStart;
+}
+
+// http://dvd.sourceforge.net/dvdinfo/pes-hdr.html
+size_t mpeg2_process_PES_packet_header(uint8_t *&p)
+{
+    uint8_t *pStart = p;
+
+    uint32_t four_bytes = read_4_bytes(p);
+    inc_ptr(p, 4);
+
+    uint32_t packet_start_code_prefix = (four_bytes & 0xffffff00) >> 8;
+    uint8_t stream_id = four_bytes & 0xff;
+
+    /* 2.4.3.7
+      PES_packet_length – A 16-bit field specifying the number of bytes in the PES packet following the last byte of the field.
+      A value of 0 indicates that the PES packet length is neither specified nor bounded and is allowed only in
+      PES packets whose payload consists of bytes from a video elementary stream contained in Transport Stream packets.
+    */
+
+    int64_t PES_packet_length = read_2_bytes(p+4);
+    inc_ptr(p, 2);
+
+    uint8_t byte = *p;
+    inc_ptr(p, 1);
+
+    uint8_t PES_scrambling_control = (byte & 0x30) >> 4;
+    uint8_t PES_priority = (byte & 0x08) >> 3;
+    uint8_t data_alignment_indicator = (byte & 0x04) >> 2;
+    uint8_t copyright = (byte & 0x02) >> 1;
+    uint8_t original_or_copy = byte & 0x01;
+
+    byte = *p;
+    inc_ptr(p, 1);
+
+    uint8_t PTS_DTS_flags = (byte & 0xC0) >> 6;
+    uint8_t ESCR_flag = (byte & 0x20) >> 5;
+    uint8_t ES_rate_flag = (byte & 0x10) >> 4;
+    uint8_t DSM_trick_mode_flag = (byte & 0x08) >> 3;
+    uint8_t additional_copy_info_flag = (byte & 0x04) >> 2;
+    uint8_t PES_CRC_flag = (byte & 0x02) >> 1;
+    uint8_t PES_extension_flag = byte & 0x01;
+
+    /*
+        PES_header_data_length – An 8-bit field specifying the total number of bytes occupied by the optional fields and any
+        stuffing bytes contained in this PES packet header. The presence of optional fields is indicated in the byte that precedes
+        the PES_header_data_length field.
+    */
+    uint8_t PES_header_data_length = *p;
+    inc_ptr(p, 1);
+
+    if(2 == PTS_DTS_flags)
+    {
+        uint32_t PTS = read_time_stamp(p);
+    }
+
+    if(3 == PTS_DTS_flags)
+    {
+        uint32_t PTS = read_time_stamp(p);
+        uint32_t DTS = read_time_stamp(p);
+    }
+
+    if(ESCR_flag) // 6 bytes
+    {
+        uint32_t byte = *p;
+        inc_ptr(p, 1);
+
+        // 31, 31, 30
+        uint32_t ESCR = (byte & 0x38) << 27;
+
+        // 29, 28
+        ESCR |= (byte & 0x03) << 29;
+
+        byte = *p;
+        inc_ptr(p, 1);
+
+        // 27, 26, 25, 24, 23, 22, 21, 20
+        ESCR |= byte << 19;
+
+        byte = *p;
+        inc_ptr(p, 1);
+
+        // 19, 18, 17, 16, 15
+        ESCR |= (byte & 0xF8) << 11;
+
+        // 14, 13
+        ESCR |= (byte & 0x03) << 13;
+
+        byte = *p;
+        inc_ptr(p, 1);
+
+        // 12, 11, 10, 9, 8, 7, 6, 5
+        ESCR |= byte << 4;
+
+        byte = *p;
+        inc_ptr(p, 1);
+
+        // 4, 3, 2, 1, 0
+        ESCR |= (byte & 0xF8) >> 3;
+
+        uint32_t ESCR_ext = (byte & 0x03) << 7;
+
+        byte = *p;
+        inc_ptr(p, 1);
+
+        ESCR_ext |= (byte & 0xFE) >> 1;
+    }
+
+    if(ES_rate_flag)
+    {
+        uint32_t four_bytes = *p;
+        inc_ptr(p, 1);
+        four_bytes <<= 8;
+
+        four_bytes |= *p;
+        inc_ptr(p, 1);
+        four_bytes <<= 8;
+
+        four_bytes |= *p;
+        inc_ptr(p, 1);
+        four_bytes <<= 8;
+
+        uint32_t ES_rate = (four_bytes & 0x7FFFFE) >> 1;
+    }
+
+    if(DSM_trick_mode_flag)
+    {
+        // Table 2-24 – Trick mode control values
+        // Value Description
+        // '000' Fast forward
+        // '001' Slow motion
+        // '010' Freeze frame
+        // '011' Fast reverse
+        // '100' Slow reverse
+        // '101'-'111' Reserved
+
+        uint8_t byte = *p;
+        inc_ptr(p, 1);
+
+        uint8_t trick_mode_control = byte >> 5;
+
+        if(0 == trick_mode_control) // Fast forward
+        {
+            uint8_t field_id = (byte & 0x18) >> 3;
+            uint8_t intra_slice_refresh = (byte & 0x04) >> 2;
+            uint8_t frequency_truncation = byte & 0x03;
+        }
+        else if(1 == trick_mode_control) // Slow motion
+        {
+            uint8_t rep_cntrl = byte & 0x1f;
+        }
+        else if(2 == trick_mode_control) // Freeze frame
+        {
+            uint8_t field_id = (byte & 0x18) >> 3;
+        }
+        else if(3 == trick_mode_control) // Fast reverse
+        {
+            uint8_t field_id = (byte & 0x18) >> 3;
+            uint8_t intra_slice_refresh = (byte & 0x04) >> 2;
+            uint8_t frequency_truncation = byte & 0x03;
+        }
+        else if(4 == trick_mode_control) // Slow reverse
+        {
+            uint8_t rep_cntrl = byte & 0x1f;
+        }
+    }
+
+    if(additional_copy_info_flag)
+    {
+        uint8_t byte = *p;
+        inc_ptr(p, 1);
+
+        uint8_t additional_copy_info = byte & 0x7F;
+    }
+
+    if(PES_CRC_flag)
+    {
+        uint16_t previous_PES_packet_CRC = read_2_bytes(p);
+        inc_ptr(p, 2);
+    }
+
+    if(PES_extension_flag)
+    {
+        uint8_t byte = *p;
+        inc_ptr(p, 1);
+
+        uint8_t PES_private_data_flag = (byte & 0x80) >> 7;
+        uint8_t pack_header_field_flag = (byte & 0x40) >> 6;
+        uint8_t program_packet_sequence_counter_flag = (byte & 0x20) >> 5;
+        uint8_t P_STD_buffer_flag = (byte & 0x10) >> 4;
+        // 3 bits Reserved
+        uint8_t PES_extension_flag_2 = byte & 0x01;
+
+        if(PES_private_data_flag)
+        {
+            uint8_t PES_private_data[16];
+            std::memcpy(PES_private_data, p, 16);
+            inc_ptr(p, 16);
+        }
+
+        if(pack_header_field_flag)
+        {
+            uint8_t pack_field_length = *p;
+            inc_ptr(p, 1);
+
+            // pack_header is here
+            // http://stnsoft.com/DVD/packhdr.html
+
+            inc_ptr(p, pack_field_length);
+        }
+
+        if(program_packet_sequence_counter_flag)
+        {
+            uint8_t byte = *p;
+            inc_ptr(p, 1);
+
+            uint8_t program_packet_sequence_counter = byte & 0x07F;
+
+            byte = *p;
+            inc_ptr(p, 1);
+
+            uint8_t MPEG1_MPEG2_identifier = (byte & 0x40) >> 6;
+        }
+
+        if(P_STD_buffer_flag)
+        {
+            uint16_t two_bytes = read_2_bytes(p);
+            inc_ptr(p, 2);
+
+            uint8_t P_STD_buffer_scale = (two_bytes & 0x2000) >> 13;
+            uint8_t P_STD_buffer_size = two_bytes & 0x1FFF;
+        }
+
+        if(PES_extension_flag_2)
+        {
+            uint8_t byte = *p;
+            inc_ptr(p, 1);
+
+            uint8_t PES_extension_field_length = byte & 0x7F;
+
+            byte = *p;
+            inc_ptr(p, 1);
+
+            uint8_t stream_id_extension_flag = (byte & 0x80) >> 7;
+
+            if(0 == stream_id_extension_flag)
+            {
+                uint8_t stream_id_extension = byte & 0x7F;
+
+                // Reserved
+
+                inc_ptr(p, PES_extension_field_length);
+            }
+        }
+    }
+
+    /*
+        From the TS spec:
+        stuffing_byte – This is a fixed 8-bit value equal to '1111 1111' that can be inserted by the encoder, for example to meet
+        the requirements of the channel. It is discarded by the decoder. No more than 32 stuffing bytes shall be present in one
+        PES packet header.
+    */
+
+    while(*p == 0xFF)
+    {
+        p++;
+        inc_ptr(p,1);
     }
 
     return p - pStart;
@@ -77,6 +438,8 @@ size_t mpeg2_process_video_PES(uint8_t *&p, size_t PES_packet_data_length)
 size_t mpeg2_process_sequence_header(uint8_t *&p)
 {
     uint8_t *pStart = p;
+
+    mpeg2_process_start_code(p, sequence_header_code);
 
     uint32_t four_bytes = read_4_bytes(p);
     inc_ptr(p, 4);
@@ -210,6 +573,8 @@ size_t mpeg2_process_extension(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
+    mpeg2_process_start_code(p, extension_start_code);
+
     switch(g_next_mpeg2_extension_type)
     {
         case sequence_extension:
@@ -246,6 +611,8 @@ size_t mpeg2_process_group_of_pictures_header(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
+    mpeg2_process_start_code(p, group_start_code);
+
     uint32_t four_bytes = read_4_bytes(p);
     inc_ptr(p, 4);
 
@@ -258,9 +625,12 @@ size_t mpeg2_process_group_of_pictures_header(uint8_t *&p)
     return p - pStart;
 }
 
+// MPEG2 spec, 13818-2, 6.2.3
 size_t mpeg2_process_picture_header(uint8_t *&p)
 {
     uint8_t *pStart = p;
+
+    mpeg2_process_start_code(p, picture_start_code);
 
     uint32_t four_bytes = read_4_bytes(p);
     inc_ptr(p, 4);
@@ -314,6 +684,7 @@ size_t mpeg2_process_picture_header(uint8_t *&p)
     return p - pStart;
 }
 
+// MPEG2 spec, 13818-2, 6.2.3.1
 size_t mpeg2_process_picture_coding_extension(uint8_t *&p)
 {
     uint8_t *pStart = p;
@@ -370,21 +741,32 @@ size_t mpeg2_process_picture_coding_extension(uint8_t *&p)
     return p - pStart;
 }
 
+// MPEG2 spec, 13818-2, 6.2.2.2.2
 size_t mpeg2_process_user_data(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
-    while(    *p != 0 ||
-          *(p+1) != 0 ||
-          *(p+2) != 1)
-        p++;
+    mpeg2_process_start_code(p, user_data_start_code);
+
+    mpeg2_next_start_code(p);
 
     return p - pStart;
 }
 
+// MPEG2 spec, 13818-2, 6.2.4
 size_t mpeg2_process_slice(uint8_t *&p)
 {
     uint8_t *pStart = p;
+
+    uint32_t four_bytes = read_4_bytes(p);
+    inc_ptr(p, 4);
+
+    uint32_t start_code_prefix = (four_bytes & 0xFFFFFF00) >> 8;
+    assert(0x000001 == start_code_prefix);
+
+    uint8_t slice_number = four_bytes & 0xff;
+
+    mpeg2_next_start_code(p);
 
     return p - pStart;
 }
