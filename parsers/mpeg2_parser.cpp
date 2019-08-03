@@ -5,6 +5,25 @@
 #include "utils.h"
 
 static e_mpeg2_extension_type g_next_mpeg2_extension_type = sequence_extension;
+static bool g_b_xml_out = false;
+
+static void inline printf_xml(unsigned int indent_level, const char *format, ...)
+{
+    if(format)
+    {
+        char output_buffer[512] = "";
+
+        for(unsigned int i = 0; i < indent_level; i++)
+            strcat_s(output_buffer, sizeof(output_buffer), "  ");
+
+        va_list arg_list;
+        va_start(arg_list, format);
+        vsprintf_s(output_buffer + (indent_level*2), sizeof(output_buffer) - (indent_level*2), format, arg_list);
+        va_end(arg_list);
+
+        printf(output_buffer);
+    }
+}
 
 static void inline inc_ptr(uint8_t *&p, size_t bytes)
 {
@@ -27,6 +46,18 @@ static size_t mpeg2_next_start_code(uint8_t *&p, size_t data_length = -1)
 
     if(-1 == count)
         return count;
+
+    return p - pStart;
+}
+
+static inline size_t mpeg2_skip_to_next_start_code(uint8_t *&p)
+{
+    uint8_t *pStart = p;
+
+    uint32_t four_bytes = read_4_bytes(p);
+    inc_ptr(p, 4);
+
+    mpeg2_next_start_code(p);
 
     return p - pStart;
 }
@@ -65,8 +96,10 @@ static uint32_t read_time_stamp(uint8_t *&p)
     return time_stamp;
 }
 
-size_t mpeg2_process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int how_many_frames)
+size_t mpeg2_process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int how_many_frames, bool b_xml_out)
 {
+    g_b_xml_out = b_xml_out;
+
     uint8_t *pStart = p;
     size_t bytes_processed = 0;
     bool bDone = false;
@@ -100,11 +133,13 @@ RETRY:
             break;
 
             case user_data_start_code:
-                bytes_processed += mpeg2_process_user_data(p);
+                //bytes_processed += mpeg2_process_user_data(p);
+                bytes_processed += mpeg2_skip_to_next_start_code(p);
             break;
 
             case sequence_header_code:
-                bytes_processed += mpeg2_process_sequence_header(p);
+                //bytes_processed += mpeg2_process_sequence_header(p);
+                bytes_processed += mpeg2_skip_to_next_start_code(p);
             break;
 
             case sequence_error_code:
@@ -112,7 +147,8 @@ RETRY:
             break;
 
             case extension_start_code:
-                bytes_processed += mpeg2_process_extension(p);
+                //bytes_processed += mpeg2_process_extension(p);
+                bytes_processed += mpeg2_skip_to_next_start_code(p);
             break;
 
             case sequence_end_code:
@@ -120,7 +156,8 @@ RETRY:
             break;
 
             case group_start_code:
-                bytes_processed += mpeg2_process_group_of_pictures_header(p);
+                //bytes_processed += mpeg2_process_group_of_pictures_header(p);
+                bytes_processed += mpeg2_skip_to_next_start_code(p);
             break;
 
             default:
@@ -128,7 +165,8 @@ RETRY:
                 if(start_code >= slice_start_codes_begin &&
                    start_code <= slice_start_codes_end)
                 {
-                    bytes_processed += mpeg2_process_slice(p);
+                    //bytes_processed += mpeg2_process_slice(p);
+                    bytes_processed += mpeg2_skip_to_next_start_code(p);
                 }
                 else if(start_code >= system_start_codes_begin &&
                         start_code <= system_start_codes_end)
@@ -139,7 +177,8 @@ RETRY:
                     }
                     else
                     {
-                        bytes_processed += mpeg2_process_PES_packet_header(p);
+                        //bytes_processed += mpeg2_process_PES_packet_header(p);
+                        bytes_processed += mpeg2_skip_to_next_start_code(p);
                         frame_number++;
                     }
                 }
@@ -645,6 +684,8 @@ size_t mpeg2_process_picture_header(uint8_t *&p)
     uint8_t forward_f_code = 0;
     uint8_t full_pel_backward_vector = 0;
     uint8_t backward_f_code = 0;
+
+    printf_xml(2, "<frame type>%c</frame type>\n", " IPB"[picture_coding_type]);
 
     if(2 == picture_coding_type)
     {

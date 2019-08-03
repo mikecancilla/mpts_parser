@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cstdio>
 #include <cstdint>
+#include <cstring>
+#include <cstdarg>
 
 inline uint16_t read_2_bytes(uint8_t *p)
 {

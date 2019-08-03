@@ -83,7 +83,7 @@ enum e_mpeg2_extension_start_code_identifier
 };
 
 // how_many_frames at a time
-size_t mpeg2_process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int how_many_frames);
+size_t mpeg2_process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int how_many_frames, bool b_xml_out = false);
 
 // Entire available stream in memory
 size_t mpeg2_process_video_PES(uint8_t *p, size_t PES_packet_data_length);

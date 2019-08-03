@@ -1227,18 +1227,18 @@ static int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start_in_fi
                 {
                     if(p_frame->pidList.size())
                     {
-                        if(g_b_analyze_elementary_stream)
-                        {
-                            size_t bytes_processed = mpeg2_process_video_frames(g_p_video_data, g_video_data_size, 1);
-                            compact_video_data(bytes_processed);
-                        }
-
                         for(pid_list_type::size_type i = 0; i != p_frame->pidList.size(); i++)
                             p_frame->totalPackets += p_frame->pidList[i].num_packets;
 
                         printf_xml(1,
                                    "<frame number=\"%d\" name=\"%s\" packets=\"%d\" pid=\"0x%x\">\n",
                                    p_frame->frameNumber++, p_frame->pidList[0].pid_name.c_str(), p_frame->totalPackets, pid);
+
+                        if(g_b_analyze_elementary_stream)
+                        {
+                            size_t bytes_processed = mpeg2_process_video_frames(g_p_video_data, g_video_data_size, 1, true);
+                            compact_video_data(bytes_processed);
+                        }
 
                         for(pid_list_type::size_type i = 0; i != p_frame->pidList.size(); i++)
                             printf_xml(2, "<slice byte=\"%llu\" packets=\"%d\"/>\n", p_frame->pidList[i].pid_byte_location, p_frame->pidList[i].num_packets);
