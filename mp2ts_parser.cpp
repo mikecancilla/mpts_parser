@@ -324,6 +324,8 @@ size_t pop_video_data()
         g_p_video_data = NULL;
     }
 
+    g_video_data_size = 0;
+    g_video_buffer_size = 0;
     g_num_pushes = 0;
     return ret;
 }
@@ -1064,8 +1066,8 @@ static size_t process_PES_packet(uint8_t *&p, int64_t packet_start_in_file, eStr
     {
         size_t PES_packet_data_length = g_packet_size - (g_pointer_position_in_file - packet_start_in_file);
         
-        if(g_b_analyze_elementary_stream)
-            push_video_data(p, PES_packet_data_length);
+//        if(g_b_analyze_elementary_stream)
+//            push_video_data(p, PES_packet_data_length);
 
         inc_ptr(p, PES_packet_data_length);
         return PES_packet_data_length;
@@ -1237,7 +1239,8 @@ static int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start_in_fi
                         if(g_b_analyze_elementary_stream)
                         {
                             size_t bytes_processed = mpeg2_process_video_frames(g_p_video_data, g_video_data_size, 1, true);
-                            compact_video_data(bytes_processed);
+                            //compact_video_data(bytes_processed);
+                            pop_video_data();
                         }
 
                         for(pid_list_type::size_type i = 0; i != p_frame->pidList.size(); i++)

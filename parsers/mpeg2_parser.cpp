@@ -130,6 +130,7 @@ RETRY:
         {
             case picture_start_code:
                 bytes_processed += mpeg2_process_picture_header(p);
+                bDone = true;
             break;
 
             case user_data_start_code:
@@ -488,6 +489,9 @@ size_t mpeg2_process_sequence_header(uint8_t *&p)
     uint8_t aspect_ratio_information = (four_bytes & 0xF0) >> 4;
     uint8_t frame_rate_code = four_bytes & 0x0F;
 
+    //printf_xml(2, "<width>%d</width>\n", horizontal_size_value);
+    //printf_xml(2, "<height>%d</height>\n", vertical_size_value);
+
     four_bytes = read_4_bytes(p);
     inc_ptr(p, 4);
 
@@ -685,7 +689,7 @@ size_t mpeg2_process_picture_header(uint8_t *&p)
     uint8_t full_pel_backward_vector = 0;
     uint8_t backward_f_code = 0;
 
-    printf_xml(2, "<frame type>%c</frame type>\n", " IPB"[picture_coding_type]);
+    printf_xml(2, "<type>%c</type>\n", " IPB"[picture_coding_type]);
 
     if(2 == picture_coding_type)
     {
