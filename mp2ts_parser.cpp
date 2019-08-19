@@ -1251,8 +1251,12 @@ static int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start_in_fi
                             pop_video_data();
                         }
 
+                        printf_xml(2, "<slices>\n");
+
                         for(pid_list_type::size_type i = 0; i != p_frame->pidList.size(); i++)
-                            printf_xml(2, "<slice byte=\"%llu\" packets=\"%d\"/>\n", p_frame->pidList[i].pid_byte_location, p_frame->pidList[i].num_packets);
+                            printf_xml(3, "<slice byte=\"%llu\" packets=\"%d\"/>\n", p_frame->pidList[i].pid_byte_location, p_frame->pidList[i].num_packets);
+
+                        printf_xml(2, "</slices>\n");
 
                         printf_xml(1, "</frame>\n");
 
@@ -1500,17 +1504,20 @@ process_packet_error:
     return ret;
 }
 
-static uint32_t mpts_read_time_stamp(uint8_t *&p)
+// 2.4.3.6 PES Packet
+//
+// Return a 33 bit number representing the time stamp
+static uint64_t mpts_read_time_stamp(uint8_t *&p)
 {
-    uint32_t byte = *p;
+    uint64_t byte = *p;
     inc_ptr(p, 1);
 
-    uint32_t time_stamp = (byte & 0x0E) << 28;
+    uint64_t time_stamp = (byte & 0x0E) << 29;
 
-    uint32_t two_bytes = read_2_bytes(p);
+    uint64_t two_bytes = read_2_bytes(p);
     inc_ptr(p, 2);
 
-    time_stamp |= (two_bytes & 0xFFFE) << 13;
+    time_stamp |= (two_bytes & 0xFFFE) << 14;
 
     two_bytes = read_2_bytes(p);
     inc_ptr(p, 2);
@@ -1520,6 +1527,10 @@ static uint32_t mpts_read_time_stamp(uint8_t *&p)
     return time_stamp;
 }
 
+float mpts_convert_time_stamp(uint64_t time_stamp)
+{
+    return (float) time_stamp / 90000.f;
+}
 
 // http://dvd.sourceforge.net/dvdinfo/pes-hdr.html
 size_t mpts_process_PES_packet_header(uint8_t *&p)
@@ -1569,18 +1580,23 @@ size_t mpts_process_PES_packet_header(uint8_t *&p)
     uint8_t PES_header_data_length = *p;
     inc_ptr(p, 1);
 
+    static uint64_t PTS_last = 0;
+
     if(2 == PTS_DTS_flags)
     {
-        uint32_t PTS = mpts_read_time_stamp(p);
-        printf_xml(2, "<PTS>%ld</PTS>\n", PTS);
+        uint64_t PTS = mpts_read_time_stamp(p);
+        printf_xml(2, "<PTS>%llu (%f)</PTS>\n", PTS, mpts_convert_time_stamp(PTS));
     }
+
+    static uint64_t DTS_last = 0;
 
     if(3 == PTS_DTS_flags)
     {
-        uint32_t PTS = mpts_read_time_stamp(p);
-        uint32_t DTS = mpts_read_time_stamp(p);
-        printf_xml(2, "<DTS>%ld</DTS>\n", DTS);
-        printf_xml(2, "<PTS>%ld</PTS>\n", PTS);
+        uint64_t PTS = mpts_read_time_stamp(p);
+        uint64_t DTS = mpts_read_time_stamp(p);
+
+        printf_xml(2, "<DTS>%llu (%f)</DTS>\n", DTS, mpts_convert_time_stamp(DTS));
+        printf_xml(2, "<PTS>%llu (%f)</PTS>\n", PTS, mpts_convert_time_stamp(PTS));
     }
 
     if(ESCR_flag) // 6 bytes

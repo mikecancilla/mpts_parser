@@ -3,23 +3,6 @@
 #include <cstdint>
 
 /*
-    Taken from 6.2.2 Video Sequence
-
-    Certain extensions are valid only at certain times.
-    They all follow after the standard extension_start_code of 0x000001B5.
-    The TYPE of data that follows the extension_strt_code is context dependent.
-*/
-enum e_mpeg2_extension_type
-{
-    sequence_extension = 0,
-    picture_coding_extension,
-    extension_and_user_data_0,
-    extension_and_user_data_1,
-    extension_and_user_data_2,
-    extension_unknown
-};
-
-/*
     Table 6-1
 
     Reserved: B0, B1, B6
@@ -82,7 +65,42 @@ enum e_mpeg2_extension_start_code_identifier
     picture_temporal_scalable_extension_id = 10
 };
 
-// how_many_frames at a time
+/*
+    Taken from 6.2.2 Video Sequence
+
+    Certain extensions are valid only at certain times.
+    They all follow after the standard extension_start_code of 0x000001B5.
+    The TYPE of data that follows the extension_strt_code is context dependent.
+*/
+enum e_mpeg2_extension_type
+{
+    sequence_extension = 0,
+    picture_coding_extension,
+    extension_and_user_data_0,
+    extension_and_user_data_1,
+    extension_and_user_data_2,
+    extension_unknown
+};
+
+/*
+    Table 6-4 --- frame_rate_value
+*/
+enum e_mpeg2_frame_rate_value
+{
+    frame_rate_forbidden = 0,   // forbidden
+    frame_rate_23976 = 1,       // 24 000÷1001 (23,976)
+    frame_rate_24 = 2,          // 24
+    frame_rate_25 = 3,          // 25
+    frame_rate_2997 = 4,        // 30 000÷1001 (29,97)
+    frame_rate_30 = 5,          // 30
+    frame_rate_50 = 6,          // 50
+    frame_rate_5994 = 7,        // 60 000÷1001 (59,94)
+    frame_rate_60 = 8           // 60
+    // . . ., reserved
+    // 0xFF, reserved
+};
+
+// Process frames_wanted frames at a time
 size_t mpeg2_process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out = false);
 
 // Entire available stream in memory
