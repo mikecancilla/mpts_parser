@@ -19,12 +19,14 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="mp2ts_parser.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="mpts_parser.cpp" />
     <ClCompile Include="parsers\mpeg2_parser.cpp" />
     <ClCompile Include="third_party\tinyxml2\tinyxml2.cpp" />
     <ClCompile Include="utils.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="mpts_parser.h" />
     <ClInclude Include="parsers\mpeg2_parser.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
