@@ -205,7 +205,7 @@ private:
     size_t m_video_data_size;
     size_t m_video_buffer_size;
 
-    std::map <uint16_t, char *>      m_pid_map; // ID, name
+    std::map <uint16_t, char *> m_pid_map; // ID, name
     std::map <uint16_t, mpts_e_stream_type> m_pid_to_type_map; // PID, stream type
 
     bool m_b_xml;
