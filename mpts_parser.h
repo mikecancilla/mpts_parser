@@ -31,7 +31,7 @@ Value	StreamType	                        Value	StreamType
 0x10 = MPEG - 4 Video                       0xa0 = MSCODEC Video
 0x11 = MPEG - 4 LATM AAC Audio              0xea = Private ES(VC - 1)
 */
-enum eStreamType
+enum mpts_e_stream_type
 {
     eReserved                                   = 0x0, 
     eMPEG1_Video                                = 0x1, 
@@ -71,7 +71,7 @@ enum eStreamType
     ePrivate_ES_VC1                             = 0xea
 };
 
-enum eStreamID
+enum mpts_e_stream_id
 {
     program_stream_map = 0xBC,
     private_stream_1 = 0xBD,
@@ -97,13 +97,13 @@ enum eStreamID
     program_stream_directory = 0xFF
 };
 
-struct pid_entry_type
+struct mpts_pid_entry_type
 {
     std::string pid_name;
     unsigned int num_packets;
     int64_t pid_byte_location;
 
-    pid_entry_type(std::string pid_name, unsigned int num_packets, int64_t pid_byte_location)
+    mpts_pid_entry_type(std::string pid_name, unsigned int num_packets, int64_t pid_byte_location)
         : pid_name(pid_name)
         , num_packets(num_packets)
         , pid_byte_location(pid_byte_location)
@@ -111,17 +111,17 @@ struct pid_entry_type
     }
 };
 
-typedef std::vector<pid_entry_type> pid_list_type;
+typedef std::vector<mpts_pid_entry_type> mpts_pid_list_type;
 
-struct Frame
+struct mpts_frame
 {
     int pid;
     int frameNumber;
     int totalPackets;
-    pid_list_type pidList;
-    eStreamType streamType;
+    mpts_pid_list_type pidList;
+    mpts_e_stream_type streamType;
 
-    Frame()
+    mpts_frame()
         : pid(-1)
         , frameNumber(0)
         , totalPackets(0)
@@ -142,7 +142,7 @@ public:
     size_t read_descriptors(uint8_t *p, uint16_t program_info_length);
 
     size_t process_PES_packet_header(uint8_t *&p);
-    size_t process_PES_packet(uint8_t *&p, int64_t packet_start_in_file, eStreamType stream_type, bool payload_unit_start);
+    size_t process_PES_packet(uint8_t *&p, int64_t packet_start_in_file, mpts_e_stream_type stream_type, bool payload_unit_start);
     int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start_in_file, size_t packet_num, bool payload_unit_start);
     uint8_t process_adaptation_field(unsigned int indent, uint8_t *&p);
     int16_t process_packet(uint8_t *packet, size_t packetNum);
@@ -182,7 +182,7 @@ private:
     size_t m_video_buffer_size;
 
     std::map <uint16_t, char *>      m_pid_map; // ID, name
-    std::map <uint16_t, eStreamType> m_pid_to_type_map; // PID, stream type
+    std::map <uint16_t, mpts_e_stream_type> m_pid_to_type_map; // PID, stream type
 
     bool m_b_xml;
     bool m_b_terse;

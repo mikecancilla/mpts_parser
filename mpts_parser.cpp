@@ -425,7 +425,7 @@ int16_t mpts_parser::read_pmt(uint8_t *&p, bool payload_unit_start)
             m_scte35_pid = elementary_pid;
 
         m_pid_map[elementary_pid] = stream_map[stream_type];
-        m_pid_to_type_map[elementary_pid] = (eStreamType) stream_type;
+        m_pid_to_type_map[elementary_pid] = (mpts_e_stream_type) stream_type;
 
         //my_printf("    %d) pid:%x, stream_type:%x (%s)\n", stream_count++, elementary_pid, stream_type, stream_map[stream_type]);
 
@@ -1216,7 +1216,7 @@ size_t mpts_parser::process_PES_packet_header(uint8_t *&p)
 }
 
 // Push data into video buffer for later processing by a decoder
-size_t mpts_parser::process_PES_packet(uint8_t *&p, int64_t packet_start_in_file, eStreamType stream_type, bool payload_unit_start)
+size_t mpts_parser::process_PES_packet(uint8_t *&p, int64_t packet_start_in_file, mpts_e_stream_type stream_type, bool payload_unit_start)
 {
     if(false == payload_unit_start)
     {
@@ -1395,11 +1395,11 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
         }
         else
         {
-            static Frame videoFrame;
-            static Frame audioFrame;
+            static mpts_frame videoFrame;
+            static mpts_frame audioFrame;
             static size_t lastPid = -1;
 
-            Frame *p_frame = nullptr;
+            mpts_frame *p_frame = nullptr;
 
             switch(m_pid_to_type_map[pid])
             {
@@ -1436,7 +1436,7 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
                 {
                     if(p_frame->pidList.size())
                     {
-                        for(pid_list_type::size_type i = 0; i != p_frame->pidList.size(); i++)
+                        for(mpts_pid_list_type::size_type i = 0; i != p_frame->pidList.size(); i++)
                             p_frame->totalPackets += p_frame->pidList[i].num_packets;
 
                         printf_xml(1,
@@ -1453,7 +1453,7 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
 
                         printf_xml(2, "<slices>\n");
 
-                        for(pid_list_type::size_type i = 0; i != p_frame->pidList.size(); i++)
+                        for(mpts_pid_list_type::size_type i = 0; i != p_frame->pidList.size(); i++)
                             printf_xml(3, "<slice byte=\"%llu\" packets=\"%d\"/>\n", p_frame->pidList[i].pid_byte_location, p_frame->pidList[i].num_packets);
 
                         printf_xml(2, "</slices>\n");
@@ -1472,12 +1472,12 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
 
                 if(bNewSet)
                 {
-                    pid_entry_type pet(m_pid_map[pid], 1, packet_start_in_file);
+                    mpts_pid_entry_type pet(m_pid_map[pid], 1, packet_start_in_file);
                     p_frame->pidList.push_back(pet);
                 }
                 else
                 {
-                    pid_entry_type &pet = p_frame->pidList.back();
+                    mpts_pid_entry_type &pet = p_frame->pidList.back();
                     pet.num_packets++;
                 }
             }
