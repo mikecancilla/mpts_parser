@@ -23,7 +23,7 @@
 */
 
 /*
-    SCTE 35 in MP2TS
+    SCTE 35 in MPTS
     http://www.scte.org/SCTEDocs/Standards/SCTE%2035%202016.pdf
 */
 
