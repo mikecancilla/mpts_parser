@@ -41,53 +41,6 @@
 
 #define VIDEO_DATA_MEMORY_INCREMENT (500 * 1024)
 
-struct pid_entry_type
-{
-    std::string pid_name;
-    unsigned int num_packets;
-    int64_t pid_byte_location;
-
-    pid_entry_type(std::string pid_name, unsigned int num_packets, int64_t pid_byte_location)
-        : pid_name(pid_name)
-        , num_packets(num_packets)
-        , pid_byte_location(pid_byte_location)
-    {
-    }
-};
-
-typedef std::vector<pid_entry_type> pid_list_type;
-
-struct Frame
-{
-    int pid;
-    int frameNumber;
-    int totalPackets;
-    pid_list_type pidList;
-    eStreamType streamType;
-
-    Frame()
-        : pid(-1)
-        , frameNumber(0)
-        , totalPackets(0)
-        , streamType(eReserved)
-    {}
-};
-
-// Global definitions
-static pid_list_type g_video_pid_list;
-static pid_list_type g_audio_pid_list;
-
-static std::map <uint16_t, char *>      g_pid_map; // ID, name
-static std::map <uint16_t, eStreamType> g_pid_to_type_map; // PID, stream type
-
-static int16_t g_program_number = -1;
-static int16_t g_program_map_pid = -1;
-static int16_t g_network_pid = 0x0010; // default value
-static int16_t g_scte35_pid = -1;
-static size_t g_video_data_size = 0;
-static size_t g_video_buffer_size = 0;
-static size_t g_num_pushes = 0;
-
 // Program and program element descriptors
 //#define 0 n / a n / a Reserved
 //#define 1 n / a n / a Reserved
@@ -125,6 +78,12 @@ mpts_parser::mpts_parser(size_t &file_position)
     : m_p_video_data(NULL)
     , m_file_position(file_position)
     , m_packet_size(0)
+    , m_program_number(-1)
+    , m_program_map_pid(-1)
+    , m_network_pid(0x0010)
+    , m_scte35_pid(-1)
+    , m_video_data_size(0)
+    , m_video_buffer_size(0)
     , m_b_xml(true)
     , m_b_terse(true)
     , m_b_analyze_elementary_stream(false)
@@ -238,28 +197,27 @@ void mpts_parser::init_stream_types(std::map <uint16_t, char *> &stream_map)
 
 size_t mpts_parser::push_video_data(uint8_t *p, size_t size)
 {
-    if(g_video_data_size + size > g_video_buffer_size)
+    if(m_video_data_size + size > m_video_buffer_size)
     {
-        g_video_buffer_size += VIDEO_DATA_MEMORY_INCREMENT;
-        m_p_video_data = (uint8_t*) realloc((void*) m_p_video_data, g_video_buffer_size);
+        m_video_buffer_size += VIDEO_DATA_MEMORY_INCREMENT;
+        m_p_video_data = (uint8_t*) realloc((void*) m_p_video_data, m_video_buffer_size);
     }
 
-    std::memcpy(m_p_video_data + g_video_data_size, p, size);
-    g_video_data_size += size;
-    g_num_pushes++;
+    std::memcpy(m_p_video_data + m_video_data_size, p, size);
+    m_video_data_size += size;
 
-    return g_video_data_size;
+    return m_video_data_size;
 }
 
 // Returns the amount of bytes left in the video buffer after compacting
 size_t mpts_parser::compact_video_data(size_t bytes_to_compact)
 {
-    size_t bytes_leftover = g_video_data_size - bytes_to_compact;
+    size_t bytes_leftover = m_video_data_size - bytes_to_compact;
 
     if(bytes_leftover > 0)
     {
         std::memcpy(m_p_video_data, m_p_video_data + bytes_to_compact, bytes_leftover);
-        g_video_data_size = bytes_leftover;
+        m_video_data_size = bytes_leftover;
     }
 
     return bytes_leftover;
@@ -267,21 +225,21 @@ size_t mpts_parser::compact_video_data(size_t bytes_to_compact)
 
 size_t mpts_parser::get_video_data_size()
 {
-    return g_video_data_size;
+    return m_video_data_size;
 }
 
 size_t mpts_parser::pop_video_data()
 {
-    size_t ret = g_video_data_size;
+    size_t ret = m_video_data_size;
     if(m_p_video_data)
     {
         free(m_p_video_data);
         m_p_video_data = NULL;
     }
 
-    g_video_data_size = 0;
-    g_video_buffer_size = 0;
-    g_num_pushes = 0;
+    m_video_data_size = 0;
+    m_video_buffer_size = 0;
+    
     return ret;
 }
 
@@ -337,31 +295,31 @@ int16_t mpts_parser::read_pat(uint8_t *&p, bool payload_unit_start)
 
     while ((p - p_section_start) < (section_length - 4))
     {
-        g_program_number = read_2_bytes(p);
+        m_program_number = read_2_bytes(p);
         inc_ptr(p, 2);
         uint16_t network_pid = 0;
 
-        if (0 == g_program_number)
+        if (0 == m_program_number)
         {
             network_pid = read_2_bytes(p);
             inc_ptr(p, 2);
             network_pid &= 0x1FFF;
-            g_network_pid = network_pid;
+            m_network_pid = network_pid;
         }
         else
         {
-            g_program_map_pid = read_2_bytes(p);
+            m_program_map_pid = read_2_bytes(p);
             inc_ptr(p, 2);
-            g_program_map_pid &= 0x1FFF;
+            m_program_map_pid &= 0x1FFF;
         }
 
         printf_xml(3, "<program>\n");
-        printf_xml(4, "<number>%d</number>\n", g_program_number);
+        printf_xml(4, "<number>%d</number>\n", m_program_number);
 
         if(network_pid)
-            printf_xml(4, "<network_pid>0x%x</network_pid>\n", g_network_pid);
+            printf_xml(4, "<network_pid>0x%x</network_pid>\n", m_network_pid);
         else
-            printf_xml(4, "<program_map_pid>0x%x</program_map_pid>\n", g_program_map_pid);
+            printf_xml(4, "<program_map_pid>0x%x</program_map_pid>\n", m_program_map_pid);
 
         printf_xml(3, "</program>\n");
     }
@@ -413,7 +371,7 @@ int16_t mpts_parser::read_pmt(uint8_t *&p, bool payload_unit_start)
     inc_ptr(p, 2);
     pcr_pid &= 0x1FFF;
 
-    g_pid_map[pcr_pid] = "PCR";
+    m_pid_map[pcr_pid] = "PCR";
 
     uint16_t program_info_length = read_2_bytes(p);
     inc_ptr(p, 2);
@@ -443,7 +401,7 @@ int16_t mpts_parser::read_pmt(uint8_t *&p, bool payload_unit_start)
     init_stream_types(stream_map);
 
     // This has to be done by hand
-    g_pid_map[0x1FFF] = "NULL Packet";
+    m_pid_map[0x1FFF] = "NULL Packet";
 
     size_t stream_count = 0;
 
@@ -464,10 +422,10 @@ int16_t mpts_parser::read_pmt(uint8_t *&p, bool payload_unit_start)
 
         // Scte35 stream type is 0x86
         if(0x86 == stream_type)
-            g_scte35_pid = elementary_pid;
+            m_scte35_pid = elementary_pid;
 
-        g_pid_map[elementary_pid] = stream_map[stream_type];
-        g_pid_to_type_map[elementary_pid] = (eStreamType) stream_type;
+        m_pid_map[elementary_pid] = stream_map[stream_type];
+        m_pid_to_type_map[elementary_pid] = (eStreamType) stream_type;
 
         //my_printf("    %d) pid:%x, stream_type:%x (%s)\n", stream_count++, elementary_pid, stream_type, stream_map[stream_type]);
 
@@ -1404,7 +1362,7 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
             0x1F >= pid) // DVB metadata
     {
     }
-    else if(g_program_map_pid == pid)
+    else if(m_program_map_pid == pid)
     {
         static bool g_b_want_pmt = true;
 
@@ -1433,7 +1391,7 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
         {
             // Here, p is pointing at actual data, like video or audio.
             // For now just print the data's type.
-            printf_xml(2, "<type_name>%s</type_name>\n", g_pid_map[pid]);
+            printf_xml(2, "<type_name>%s</type_name>\n", m_pid_map[pid]);
         }
         else
         {
@@ -1443,7 +1401,7 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
 
             Frame *p_frame = nullptr;
 
-            switch(g_pid_to_type_map[pid])
+            switch(m_pid_to_type_map[pid])
             {
                 case eMPEG2_Video:
                     p_frame = &videoFrame;
@@ -1488,7 +1446,7 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
                         if(m_b_analyze_elementary_stream)
                         {
                             unsigned int frames_received = 0;
-                            size_t bytes_processed = process_video_frames(m_p_video_data, g_video_data_size, 1, frames_received, m_b_xml);
+                            size_t bytes_processed = process_video_frames(m_p_video_data, m_video_data_size, 1, frames_received, m_b_xml);
                             //compact_video_data(bytes_processed);
                             pop_video_data();
                         }
@@ -1514,7 +1472,7 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
 
                 if(bNewSet)
                 {
-                    pid_entry_type pet(g_pid_map[pid], 1, packet_start_in_file);
+                    pid_entry_type pet(m_pid_map[pid], 1, packet_start_in_file);
                     p_frame->pidList.push_back(pet);
                 }
                 else
@@ -1527,7 +1485,7 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
             lastPid = pid;
         }
 
-        process_PES_packet(p, packet_start_in_file, g_pid_to_type_map[pid], payload_unit_start);
+        process_PES_packet(p, packet_start_in_file, m_pid_to_type_map[pid], payload_unit_start);
     }
 
     return 0;

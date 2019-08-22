@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #include <map>
 #include <cstdint>
 
@@ -96,6 +97,38 @@ enum eStreamID
     program_stream_directory = 0xFF
 };
 
+struct pid_entry_type
+{
+    std::string pid_name;
+    unsigned int num_packets;
+    int64_t pid_byte_location;
+
+    pid_entry_type(std::string pid_name, unsigned int num_packets, int64_t pid_byte_location)
+        : pid_name(pid_name)
+        , num_packets(num_packets)
+        , pid_byte_location(pid_byte_location)
+    {
+    }
+};
+
+typedef std::vector<pid_entry_type> pid_list_type;
+
+struct Frame
+{
+    int pid;
+    int frameNumber;
+    int totalPackets;
+    pid_list_type pidList;
+    eStreamType streamType;
+
+    Frame()
+        : pid(-1)
+        , frameNumber(0)
+        , totalPackets(0)
+        , streamType(eReserved)
+    {}
+};
+
 class mpts_parser
 {
 public:
@@ -141,6 +174,15 @@ private:
     uint8_t *m_p_video_data;
     size_t &m_file_position;
     unsigned int m_packet_size;
+    int16_t m_program_number;
+    int16_t m_program_map_pid;
+    int16_t m_network_pid; // TODO: this is stored but not used
+    int16_t m_scte35_pid; // TODO: this is stored but not used
+    size_t m_video_data_size;
+    size_t m_video_buffer_size;
+
+    std::map <uint16_t, char *>      m_pid_map; // ID, name
+    std::map <uint16_t, eStreamType> m_pid_to_type_map; // PID, stream type
 
     bool m_b_xml;
     bool m_b_terse;
