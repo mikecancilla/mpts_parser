@@ -991,6 +991,7 @@ size_t mpts_parser::process_PES_packet_header(uint8_t *&p)
     if(2 == PTS_DTS_flags)
     {
         uint64_t PTS = read_time_stamp(p);
+        printf_xml(2, "<DTS>%llu (%f)</DTS>\n", PTS, convert_time_stamp(PTS));
         printf_xml(2, "<PTS>%llu (%f)</PTS>\n", PTS, convert_time_stamp(PTS));
     }
 
@@ -1207,10 +1208,7 @@ size_t mpts_parser::process_PES_packet_header(uint8_t *&p)
     */
 
     while(*p == 0xFF)
-    {
-        p++;
         inc_ptr(p,1);
-    }
 
     return p - pStart;
 }
@@ -1322,6 +1320,8 @@ Decimal	    Hexadecimal	    Description
 
 int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start_in_file, size_t packet_num, bool payload_unit_start)
 {
+    static size_t lastPid = -1;
+
     if(0x00 == pid) // PAT - Program Association Table
     {
         static bool g_b_want_pat = true;
@@ -1397,7 +1397,6 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
         {
             static mpts_frame videoFrame;
             static mpts_frame audioFrame;
-            static size_t lastPid = -1;
 
             mpts_frame *p_frame = nullptr;
 
@@ -1481,12 +1480,12 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
                     pet.num_packets++;
                 }
             }
-
-            lastPid = pid;
         }
 
         process_PES_packet(p, packet_start_in_file, m_pid_to_type_map[pid], payload_unit_start);
     }
+
+    lastPid = pid;
 
     return 0;
 }
@@ -1656,14 +1655,12 @@ int16_t mpts_parser::process_packet(uint8_t *packet, size_t packetNum)
 
     PID &= 0x1FFF;
 
-    uint8_t adaptation_field_control = 1;
-
     // Move beyond the 32 bit header
     uint8_t final_byte = *p;
     inc_ptr(p, 1);
 
     uint8_t transport_scrambling_control = (final_byte & 0xC0) >> 6;
-    adaptation_field_control = (final_byte & 0x30) >> 4;
+    uint8_t adaptation_field_control = (final_byte & 0x30) >> 4;
     uint8_t continuity_counter = (final_byte & 0x0F) >> 4;
 
     if(false == m_b_terse)
