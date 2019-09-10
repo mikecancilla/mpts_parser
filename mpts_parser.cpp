@@ -1214,14 +1214,14 @@ size_t mpts_parser::process_PES_packet_header(uint8_t *&p)
 }
 
 // Push data into video buffer for later processing by a decoder
-size_t mpts_parser::process_PES_packet(uint8_t *&p, int64_t packet_start_in_file, mpts_e_stream_type stream_type, bool payload_unit_start)
+size_t mpts_parser::process_PES_packet(uint8_t *&packet_start, uint8_t *&p, mpts_e_stream_type stream_type, bool payload_unit_start)
 {
     if(false == payload_unit_start)
     {
-        size_t PES_packet_data_length = m_packet_size - (m_file_position - packet_start_in_file);
+        size_t PES_packet_data_length = m_packet_size - (p - packet_start);
         
-//        if(g_b_analyze_elementary_stream)
-//            push_video_data(p, PES_packet_data_length);
+        if(m_b_analyze_elementary_stream)
+            push_video_data(p, PES_packet_data_length);
 
         inc_ptr(p, PES_packet_data_length);
         return PES_packet_data_length;
@@ -1242,7 +1242,7 @@ size_t mpts_parser::process_PES_packet(uint8_t *&p, int64_t packet_start_in_file
     int64_t PES_packet_length = read_2_bytes(p+4);
 
     if(0 == PES_packet_length)
-        PES_packet_length = m_packet_size - (m_file_position - packet_start_in_file);
+        PES_packet_length = m_packet_size - (p - packet_start);
 
     if (stream_id != program_stream_map &&
         stream_id != padding_stream &&
@@ -1286,6 +1286,41 @@ size_t mpts_parser::process_PES_packet(uint8_t *&p, int64_t packet_start_in_file
     return PES_packet_length;
 }
 
+void mpts_parser::print_frame_info(mpts_frame *p_frame)
+{
+    if(p_frame)
+    {
+        if(p_frame->pidList.size())
+        {
+            for(mpts_pid_list_type::size_type i = 0; i != p_frame->pidList.size(); i++)
+                p_frame->totalPackets += p_frame->pidList[i].num_packets;
+
+            printf_xml(1,
+                        "<frame number=\"%d\" name=\"%s\" packets=\"%d\" pid=\"0x%x\">\n",
+                        p_frame->frameNumber++, p_frame->pidList[0].pid_name.c_str(), p_frame->totalPackets, p_frame->pid);
+
+            if(m_b_analyze_elementary_stream)
+            {
+                unsigned int frames_received = 0;
+                size_t bytes_processed = process_video_frames(m_p_video_data, m_video_data_size, 1, frames_received, m_b_xml);
+                //compact_video_data(bytes_processed);
+                pop_video_data();
+            }
+
+            printf_xml(2, "<slices>\n");
+
+            for(mpts_pid_list_type::size_type i = 0; i != p_frame->pidList.size(); i++)
+                printf_xml(3, "<slice byte=\"%llu\" packets=\"%d\"/>\n", p_frame->pidList[i].pid_byte_location, p_frame->pidList[i].num_packets);
+
+            printf_xml(2, "</slices>\n");
+
+            printf_xml(1, "</frame>\n");
+
+            p_frame->totalPackets = 0;
+        }
+    }
+}
+
 // Process each PID (Packet Identifier) for each 188 byte packet
 // https://en.wikipedia.org/wiki/MPEG_transport_stream#Packet_identifier_(PID)
 // https://www.linuxtv.org/wiki/index.php/PID
@@ -1318,11 +1353,11 @@ Decimal	    Hexadecimal	    Description
 8191	    0x1FFF	        Null Packet (used for fixed bandwidth padding)
 */
 
-int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start_in_file, size_t packet_num, bool payload_unit_start)
+int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&packet_start, uint8_t *&p, int64_t packet_start_in_file, size_t packet_num, bool payload_unit_start, uint8_t adaptation_field_length)
 {
     static size_t lastPid = -1;
 
-    if(0x00 == pid) // PAT - Program Association Table
+    if(ePAT == pid) // PAT - Program Association Table
     {
         static bool g_b_want_pat = true;
 
@@ -1344,23 +1379,6 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
 
         if(m_b_terse)
             g_b_want_pat = false;
-    }
-    else if(0x01 == pid) // CAT - Conditional Access Table
-    {
-    }
-    else if(0x02 == pid) // TSDT - Transport Stream Description Table
-    {
-    }
-    else if(0x03 == pid) // IPMP
-    {
-    }
-    else if(0x04 <= pid &&
-            0x0F >= pid) // Reserved
-    {
-    }
-    else if(0x10 <= pid &&
-            0x1F >= pid) // DVB metadata
-    {
     }
     else if(m_program_map_pid == pid)
     {
@@ -1385,7 +1403,7 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
         if(m_b_terse)
             g_b_want_pmt = false;
     }
-    else
+    else if(pid >= eAsNeededStart && pid <= eAsNeededEnd)
     {
         if(false == m_b_terse)
         {
@@ -1395,15 +1413,12 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
         }
         else
         {
-            static mpts_frame videoFrame;
-            static mpts_frame audioFrame;
-
             mpts_frame *p_frame = nullptr;
 
             switch(m_pid_to_type_map[pid])
             {
                 case eMPEG2_Video:
-                    p_frame = &videoFrame;
+                    p_frame = &m_video_frame;
                     p_frame->pid = pid;
                     p_frame->streamType = eMPEG2_Video;
                 break;
@@ -1422,7 +1437,7 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
                 case eHDMV_DTS_Audio:
                 case eA52b_AC3_Audio:
                 case eSDDS_Audio:
-                    //p_frame = &audioFrame;
+                    //p_frame = &m_audio_frame;
                     //p_frame->pid = pid;
                 break;
             }
@@ -1433,34 +1448,7 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
 
                 if(payload_unit_start)
                 {
-                    if(p_frame->pidList.size())
-                    {
-                        for(mpts_pid_list_type::size_type i = 0; i != p_frame->pidList.size(); i++)
-                            p_frame->totalPackets += p_frame->pidList[i].num_packets;
-
-                        printf_xml(1,
-                                   "<frame number=\"%d\" name=\"%s\" packets=\"%d\" pid=\"0x%x\">\n",
-                                   p_frame->frameNumber++, p_frame->pidList[0].pid_name.c_str(), p_frame->totalPackets, pid);
-
-                        if(m_b_analyze_elementary_stream)
-                        {
-                            unsigned int frames_received = 0;
-                            size_t bytes_processed = process_video_frames(m_p_video_data, m_video_data_size, 1, frames_received, m_b_xml);
-                            //compact_video_data(bytes_processed);
-                            pop_video_data();
-                        }
-
-                        printf_xml(2, "<slices>\n");
-
-                        for(mpts_pid_list_type::size_type i = 0; i != p_frame->pidList.size(); i++)
-                            printf_xml(3, "<slice byte=\"%llu\" packets=\"%d\"/>\n", p_frame->pidList[i].pid_byte_location, p_frame->pidList[i].num_packets);
-
-                        printf_xml(2, "</slices>\n");
-
-                        printf_xml(1, "</frame>\n");
-
-                        p_frame->totalPackets = 0;
-                    }
+                    print_frame_info(p_frame);
 
                     p_frame->pidList.clear();
                     bNewSet = true;
@@ -1482,12 +1470,21 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start
             }
         }
 
-        process_PES_packet(p, packet_start_in_file, m_pid_to_type_map[pid], payload_unit_start);
+        p += adaptation_field_length;
+
+        if(p - packet_start != m_packet_size)
+            process_PES_packet(packet_start, p, m_pid_to_type_map[pid], payload_unit_start);
     }
 
     lastPid = pid;
 
     return 0;
+}
+
+uint8_t mpts_parser::get_adaptation_field_length(uint8_t *&p)
+{
+    uint8_t adaptation_field_length = *p;
+    return adaptation_field_length + 1;
 }
 
 uint8_t mpts_parser::process_adaptation_field(unsigned int indent, uint8_t *&p)
@@ -1645,15 +1642,15 @@ int16_t mpts_parser::process_packet(uint8_t *packet, size_t packetNum)
     // Skip the sync byte 0x47
     inc_ptr(p, 1);
 
-    uint16_t PID = read_2_bytes(p);
+    uint16_t pid = read_2_bytes(p);
     inc_ptr(p, 2);
 
-    uint8_t transport_error_indicator = (PID & 0x8000) >> 15;
-    uint8_t payload_unit_start_indicator = (PID & 0x4000) >> 14;
+    uint8_t transport_error_indicator = (pid & 0x8000) >> 15;
+    uint8_t payload_unit_start_indicator = (pid & 0x4000) >> 14;
 
-    uint8_t transport_priority = (PID & 0x2000) >> 13;
+    uint8_t transport_priority = (pid & 0x2000) >> 13;
 
-    PID &= 0x1FFF;
+    pid &= 0x1FFF;
 
     // Move beyond the 32 bit header
     uint8_t final_byte = *p;
@@ -1665,7 +1662,7 @@ int16_t mpts_parser::process_packet(uint8_t *packet, size_t packetNum)
 
     if(false == m_b_terse)
     {
-        printf_xml(2, "<pid>0x%x</pid>\n", PID);
+        printf_xml(2, "<pid>0x%x</pid>\n", pid);
         printf_xml(2, "<payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payload_unit_start_indicator);
         printf_xml(2, "<transport_error_indicator>0x%x</transport_error_indicator>\n", transport_error_indicator);
         printf_xml(2, "<transport_priority>0x%x</transport_priority>\n", transport_priority);
@@ -1684,14 +1681,12 @@ int16_t mpts_parser::process_packet(uint8_t *packet, size_t packetNum)
     */
     uint8_t adaptation_field_length = 0;
 
-    if(2 == adaptation_field_control ||
-       3 == adaptation_field_control)
-    {
-        adaptation_field_length = process_adaptation_field(2, p);
-    }
+    if(2 == adaptation_field_control)
+        adaptation_field_length = m_packet_size - 4;
+    else if(3 == adaptation_field_control)
+        adaptation_field_length = get_adaptation_field_length(p);
 
-    if(2 != adaptation_field_control)
-        ret = process_pid(PID, p, packet_start_in_file, packetNum, 1 == payload_unit_start_indicator);
+    ret = process_pid(pid, packet, p, packet_start_in_file, packetNum, 1 == payload_unit_start_indicator, adaptation_field_length);
 
 process_packet_error:
 
@@ -1794,4 +1789,9 @@ int mpts_parser::determine_packet_size(uint8_t buffer[5])
         return -1;
 
     return m_packet_size;
+}
+
+void mpts_parser::flush()
+{
+    print_frame_info(&m_video_frame);
 }

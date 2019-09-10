@@ -121,6 +121,80 @@ enum mpts_e_stream_id
     program_stream_directory = 0xFF
 };
 
+// Process each PID (Packet Identifier) for each 188 byte packet
+//
+// Table 2-3 – PID table
+/*
+    Value           Description
+    -----           -----------
+    0x0000          Program Association Table
+    0x0001          Conditional Access Table
+    0x0002          Transport Stream Description Table
+    0x0003          IPMP Control Information Table
+    0x0004-0x000F   Reserved
+    0x0010-0x1FFE   May be assigned as network_PID, Program_map_PID, elementary_PID, or for other purposes
+    0x1FFF          Null packet
+    NOTE – The transport packets with PID values 0x0000, 0x0001, and 0x0010-0x1FFE are allowed to carry a PCR.
+*/
+
+// https://en.wikipedia.org/wiki/MPEG_transport_stream#Packet_identifier_(PID)
+// https://www.linuxtv.org/wiki/index.php/PID
+/*
+Packet identifiers in use
+Decimal	    Hexadecimal	    Description
+0	        0x0000	        Program association table (PAT) contains a directory listing of all program map tables
+1	        0x0001	        Conditional access table (CAT) contains a directory listing of all ITU-T Rec. H.222 entitlement management message streams used by program map tables
+2	        0x0002	        Transport stream description table (TSDT) contains descriptors relating to the overall transport stream
+3	        0x0003	        IPMP control information table contains a directory listing of all ISO/IEC 14496-13 control streams used by program map tables
+4–15	    0x0004-0x000F	Reserved for future use
+-----------------------
+16–31	    0x0010-0x001F	Used by DVB metadata[10]
+            0x0010: NIT, ST
+            0x0011: SDT, BAT, ST
+            0x0012: EIT, ST, CIT
+            0x0013: RST, ST
+            0x0014: TDT, TOT, ST
+            0x0015: network synchronization
+            0x0016: RNT
+            0x0017-0x001B: reserved for future use
+            0x001C: inband signalling
+            0x001D: measurement
+            0x001E: DIT
+            0x001F: SIT
+-----------------------
+32-8186	    0x0020-0x1FFA	May be assigned as needed to program map tables, elementary streams and other data tables
+8187	    0x1FFB	Used by DigiCipher 2/ATSC MGT metadata
+8188–8190	0x1FFC-0x1FFE	May be assigned as needed to program map tables, elementary streams and other data tables
+8191	    0x1FFF	        Null Packet (used for fixed bandwidth padding)
+*/
+
+enum mpts_packet_identifier
+{
+    ePAT = 0x00,
+    eCAT = 0x01,
+    eTSDT = 0x02,
+    eIPMP = 0x03,
+    eReserved0Start = 0x04,
+    eReserved0End = 0x0F,
+    eNIT = 0x10, // DVB Metadata start, included the as needed set defined below
+    eSDT = 0x11,
+    eEIT = 0x12,
+    eRST = 0x13,
+    eTDT = 0x14,
+    eNetworkSync = 0x15,
+    eRNT = 0x16,
+    eReserved1Start = 0x17,
+    eReserved1End = 0x1B,
+    eInbandSignalling = 0x1C,
+    eMeasurement = 0x1D,
+    eDIT = 0x1E,
+    eSIT = 0x01F, // DVB Metadata end
+    eAsNeededStart = 0x10,
+    eAsNeededEnd = 0x1FFE,
+    eDigiCipher = 0x1FFB,
+    eNull = 0x1FFF
+};
+
 struct mpts_pid_entry_type
 {
     std::string pid_name;
@@ -166,8 +240,9 @@ public:
     size_t read_descriptors(uint8_t *p, uint16_t program_info_length);
 
     size_t process_PES_packet_header(uint8_t *&p);
-    size_t process_PES_packet(uint8_t *&p, int64_t packet_start_in_file, mpts_e_stream_type stream_type, bool payload_unit_start);
-    int16_t process_pid(uint16_t pid, uint8_t *&p, int64_t packet_start_in_file, size_t packet_num, bool payload_unit_start);
+    size_t process_PES_packet(uint8_t *&packet_start, uint8_t *&p, mpts_e_stream_type stream_type, bool payload_unit_start);
+    int16_t process_pid(uint16_t pid, uint8_t *&packet_start, uint8_t *&p, int64_t packet_start_in_file, size_t packet_num, bool payload_unit_start, uint8_t adaptation_field_length);
+    uint8_t get_adaptation_field_length(uint8_t *&p);
     uint8_t process_adaptation_field(unsigned int indent, uint8_t *&p);
     int16_t process_packet(uint8_t *packet, size_t packetNum);
     size_t process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out);
@@ -177,6 +252,8 @@ public:
     size_t compact_video_data(size_t bytes_to_compact);
     size_t get_video_data_size();
 
+    void print_frame_info(mpts_frame *p_frame);
+
     bool set_print_xml(bool tf);
     bool get_print_xml();
 
@@ -185,6 +262,8 @@ public:
 
     bool set_analyze_elementary_stream(bool tf);
     bool get_analyze_elementary_stream();
+
+    void flush();
 
 private:
 
@@ -211,4 +290,7 @@ private:
     bool m_b_xml;
     bool m_b_terse;
     bool m_b_analyze_elementary_stream;
+
+    mpts_frame m_video_frame;
+    mpts_frame m_audio_frame;
 };
