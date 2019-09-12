@@ -120,8 +120,8 @@ RETRY:
             break;
 
             case group_start_code:
-                //bytes_processed += mpeg2_process_group_of_pictures_header(p);
-                bytes_processed += skip_to_next_start_code(p);
+                bytes_processed += mpeg2_process_group_of_pictures_header(p);
+                //bytes_processed += skip_to_next_start_code(p);
             break;
 
             default:
@@ -348,6 +348,8 @@ size_t mpeg2_process_group_of_pictures_header(uint8_t *&p)
     uint32_t time_code =  (four_bytes & 0xFFFFFF80) >> 7;
     uint8_t closed_gop =  (four_bytes & 0x00000040) >> 6;
     uint8_t broken_link = (four_bytes & 0x00000020) >> 5;
+
+    printf_xml(2, "<closed_gop>%d</closed_gop>\n", closed_gop);
 
     g_next_mpeg2_extension_type = extension_and_user_data_1;
 
