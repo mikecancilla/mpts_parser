@@ -118,6 +118,7 @@
       <AdditionalIncludeDirectories>$(SolutionDir);$(SolutionDir)third_party\tinyxml2;$(SolutionDir)parsers;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <SDLCheck>true</SDLCheck>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

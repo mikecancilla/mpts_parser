@@ -1467,13 +1467,13 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&packet_start, uint8_t *
                     mpts_pid_entry_type &pet = p_frame->pidList.back();
                     pet.num_packets++;
                 }
+
+                p += adaptation_field_length;
+
+                if(p - packet_start != m_packet_size)
+                    process_PES_packet(packet_start, p, m_pid_to_type_map[pid], payload_unit_start);
             }
         }
-
-        p += adaptation_field_length;
-
-        if(p - packet_start != m_packet_size)
-            process_PES_packet(packet_start, p, m_pid_to_type_map[pid], payload_unit_start);
     }
 
     lastPid = pid;
