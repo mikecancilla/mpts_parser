@@ -25,6 +25,7 @@
 #pragma once
 
 #include <cstdint>
+#include <base_parser.h>
 
 /*
     Table 6-1
@@ -124,19 +125,31 @@ enum e_mpeg2_frame_rate_value
     // 0xFF, reserved
 };
 
-// Process frames_wanted frames at a time
-size_t mpeg2_process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out = false);
+class mpeg2_parser : public base_parser
+{
+public:
 
-// Entire available stream in memory
-size_t mpeg2_process_video_PES(uint8_t *p, size_t PES_packet_data_length);
+    mpeg2_parser()
+        : m_next_mpeg2_extension_type(sequence_extension)
+    {}
 
-size_t mpeg2_process_sequence_header(uint8_t *&p);
-size_t mpeg2_process_extension(uint8_t *&p);
-size_t mpeg2_process_sequence_display_extension(uint8_t *&p);
-size_t mpeg2_process_sequence_scalable_extension(uint8_t *&p);
-size_t mpeg2_process_extension_and_user_data_0(uint8_t *&p);
-size_t mpeg2_process_group_of_pictures_header(uint8_t *&p);
-size_t mpeg2_process_picture_header(uint8_t *&p);
-size_t mpeg2_process_picture_coding_extension(uint8_t *&p);
-size_t mpeg2_process_user_data(uint8_t *&p);
-size_t mpeg2_process_slice(uint8_t *&p);
+    // Process frames_wanted frames at a time
+    virtual size_t process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out = false) override;
+
+private:
+    // Entire available stream in memory
+    size_t process_video_PES(uint8_t *p, size_t PES_packet_data_length);
+    size_t process_sequence_header(uint8_t *&p);
+    size_t process_sequence_extension(uint8_t *&p);
+    size_t process_sequence_display_extension(uint8_t *&p);
+    size_t process_sequence_scalable_extension(uint8_t *&p);
+    size_t process_extension_and_user_data_0(uint8_t *&p);
+    size_t process_extension(uint8_t *&p);
+    size_t process_group_of_pictures_header(uint8_t *&p);
+    size_t process_picture_header(uint8_t *&p);
+    size_t process_picture_coding_extension(uint8_t *&p);
+    size_t process_user_data(uint8_t *&p);
+    size_t process_slice(uint8_t *&p);
+
+    e_mpeg2_extension_type m_next_mpeg2_extension_type;
+};

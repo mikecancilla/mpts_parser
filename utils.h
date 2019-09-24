@@ -53,7 +53,7 @@ inline uint32_t read_4_bytes(uint8_t *p)
     return ret;
 }
 
-size_t inline increment_ptr(uint8_t *&p, size_t bytes)
+inline size_t increment_ptr(uint8_t *&p, size_t bytes)
 {
     p += bytes;
     return bytes;

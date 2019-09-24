@@ -38,6 +38,7 @@
 #include "mpts_parser.h"
 #include "utils.h"
 #include "mpeg2_parser.h"
+#include "avc_parser.h"
 
 #define VIDEO_DATA_MEMORY_INCREMENT (500 * 1024)
 
@@ -74,6 +75,54 @@
 //#define 36 - 63 n / a n / a ITU - T Rec.H.222.0 | ISO / IEC 13818 - 1 Reserved
 //#define 64 - 255 n / a n / a User Private
 
+/*
+static size_t inline next_start_code(uint8_t *&p, size_t data_length = -1)
+{
+    size_t count = 0;
+    uint8_t *pStart = p;
+
+    while(    *p != 0 ||
+          *(p+1) != 0 ||
+          *(p+2) != 1 &&
+          count < data_length)
+    {
+        increment_ptr(p, 1);
+        count++;
+    }
+
+    if(-1 == count)
+        return count;
+
+    return p - pStart;
+}
+
+static inline size_t skip_to_next_start_code(uint8_t *&p)
+{
+    uint8_t *pStart = p;
+
+    uint32_t four_bytes = read_4_bytes(p);
+    increment_ptr(p, 4);
+
+    next_start_code(p);
+
+    return p - pStart;
+}
+
+static inline size_t validate_start_code(uint8_t *&p, uint32_t start_code)
+{
+    uint32_t four_bytes = read_4_bytes(p);
+    increment_ptr(p, 4);
+
+    uint32_t start_code_prefix = (four_bytes & 0xFFFFFF00) >> 8;
+    assert(0x000001 == start_code_prefix);
+
+    four_bytes &= 0x000000FF;
+    assert(four_bytes == start_code);
+
+    return 4;
+}
+*/
+
 mpts_parser::mpts_parser(size_t &file_position)
     : m_p_video_data(NULL)
     , m_file_position(file_position)
@@ -87,6 +136,7 @@ mpts_parser::mpts_parser(size_t &file_position)
     , m_b_xml(true)
     , m_b_terse(true)
     , m_b_analyze_elementary_stream(false)
+    , m_parser(nullptr)
 {
 }
 
@@ -1253,18 +1303,19 @@ size_t mpts_parser::process_PES_packet(uint8_t *&packet_start, uint8_t *&p, mpts
         stream_id != DSMCC_stream &&
         stream_id != itu_h222_e_stream)
     {
-        if(eMPEG2_Video == stream_type)
-        {
+        //if(eMPEG2_Video == stream_type ||
+        //   eH264_Video == stream_type)
+        //{
             // Push first PES packet, lots of info here.
             if(m_b_analyze_elementary_stream)
                 push_video_data(p, PES_packet_length);
 
             inc_ptr(p, PES_packet_length);
-        }
-        else
-        {
-            inc_ptr(p, PES_packet_length);
-        }
+        //}
+        //else
+        //{
+        //    inc_ptr(p, PES_packet_length);
+        //}
     }
     else if (stream_id == program_stream_map ||
              stream_id == private_stream_2 ||
@@ -1302,7 +1353,7 @@ void mpts_parser::print_frame_info(mpts_frame *p_frame)
             if(m_b_analyze_elementary_stream)
             {
                 unsigned int frames_received = 0;
-                size_t bytes_processed = process_video_frames(m_p_video_data, m_video_data_size, 1, frames_received, m_b_xml);
+                size_t bytes_processed = process_video_frames(m_p_video_data, m_video_data_size, p_frame->streamType, 1, frames_received, m_b_xml);
                 //compact_video_data(bytes_processed);
                 pop_video_data();
             }
@@ -1418,13 +1469,23 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&packet_start, uint8_t *
             switch(m_pid_to_type_map[pid])
             {
                 case eMPEG2_Video:
+                    if(nullptr == m_parser)
+                        m_parser = std::shared_ptr<base_parser>(new mpeg2_parser());
+
                     p_frame = &m_video_frame;
                     p_frame->pid = pid;
                     p_frame->streamType = eMPEG2_Video;
                 break;
+                case eH264_Video:
+                    if(nullptr == m_parser)
+                        m_parser = std::shared_ptr<base_parser>(new avc_parser());
+
+                    p_frame = &m_video_frame;
+                    p_frame->pid = pid;
+                    p_frame->streamType = eH264_Video;
+                break;
                 case eMPEG1_Video:
                 case eMPEG4_Video:
-                case eH264_Video:
                 case eDigiCipher_II_Video:
                 case eMSCODEC_Video:
                 break;
@@ -1724,7 +1785,7 @@ float mpts_parser::convert_time_stamp(uint64_t time_stamp)
     return (float) time_stamp / 90000.f;
 }
 
-size_t mpts_parser::process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out)
+size_t mpts_parser::process_video_frames(uint8_t *p, size_t PES_packet_data_length, mpts_e_stream_type streamType, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out)
 {
     uint8_t *pStart = p;
     size_t bytes_processed = 0;
@@ -1766,10 +1827,16 @@ RETRY:
                 //bytes_processed += skip_to_next_start_code(p);
             }
 
-            continue;
+//            continue;
         }
 
-        bytes_processed = mpeg2_process_video_frames(p, PES_packet_data_length, frames_wanted, frames_received, b_xml_out);
+        //switch(streamType)
+        //{
+        //    case eMPEG2_Video:
+                bytes_processed = m_parser->process_video_frames(p, PES_packet_data_length, frames_wanted, frames_received, b_xml_out);
+        //    break;
+        //}
+
         if(frames_wanted == frames_received)
             bDone = true;
     }

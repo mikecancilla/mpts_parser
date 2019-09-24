@@ -26,7 +26,9 @@
 
 #include <vector>
 #include <map>
+#include <memory>
 #include <cstdint>
+#include <base_parser.h>
 
 // Type definitions
 
@@ -245,7 +247,7 @@ public:
     uint8_t get_adaptation_field_length(uint8_t *&p);
     uint8_t process_adaptation_field(unsigned int indent, uint8_t *&p);
     int16_t process_packet(uint8_t *packet, size_t packetNum);
-    size_t process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out);
+    size_t process_video_frames(uint8_t *p, size_t PES_packet_data_length, mpts_e_stream_type streamType, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out);
 
     size_t push_video_data(uint8_t *p, size_t size);
     size_t pop_video_data();
@@ -293,4 +295,6 @@ private:
 
     mpts_frame m_video_frame;
     mpts_frame m_audio_frame;
+
+    std::shared_ptr<base_parser> m_parser;
 };

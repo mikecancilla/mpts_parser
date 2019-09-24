@@ -28,9 +28,6 @@
 #include "mpeg2_parser.h"
 #include "utils.h"
 
-static e_mpeg2_extension_type g_next_mpeg2_extension_type = sequence_extension;
-static bool g_b_xml_out = false;
-
 static void inline printf_xml(unsigned int indent_level, const char *format, ...)
 {
     if(format)
@@ -54,9 +51,9 @@ static void inline inc_ptr(uint8_t *&p, size_t bytes)
     increment_ptr(p, bytes);
 }
 
-size_t mpeg2_process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out)
+size_t mpeg2_parser::process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out)
 {
-    g_b_xml_out = b_xml_out;
+    m_b_xml_out = b_xml_out;
 
     uint8_t *pStart = p;
     size_t bytes_processed = 0;
@@ -84,10 +81,11 @@ RETRY:
         }
 
         start_code &= 0x000000FF;
+
         switch(start_code)
         {
             case picture_start_code:
-                bytes_processed += mpeg2_process_picture_header(p);
+                bytes_processed += process_picture_header(p);
                 frames_received++;
 
                 if(frames_received == frames_wanted)
@@ -97,12 +95,12 @@ RETRY:
             break;
 
             case user_data_start_code:
-                //bytes_processed += mpeg2_process_user_data(p);
+                //bytes_processed += process_user_data(p);
                 bytes_processed += skip_to_next_start_code(p);
             break;
 
             case sequence_header_code:
-                //bytes_processed += mpeg2_process_sequence_header(p);
+                //bytes_processed += process_sequence_header(p);
                 bytes_processed += skip_to_next_start_code(p);
             break;
 
@@ -111,7 +109,7 @@ RETRY:
             break;
 
             case extension_start_code:
-                //bytes_processed += mpeg2_process_extension(p);
+                //bytes_processed += process_extension(p);
                 bytes_processed += skip_to_next_start_code(p);
             break;
 
@@ -120,7 +118,7 @@ RETRY:
             break;
 
             case group_start_code:
-                bytes_processed += mpeg2_process_group_of_pictures_header(p);
+                bytes_processed += process_group_of_pictures_header(p);
                 //bytes_processed += skip_to_next_start_code(p);
             break;
 
@@ -129,7 +127,7 @@ RETRY:
                 if(start_code >= slice_start_codes_begin &&
                    start_code <= slice_start_codes_end)
                 {
-                    //bytes_processed += mpeg2_process_slice(p);
+                    //bytes_processed += process_slice(p);
                     bytes_processed += skip_to_next_start_code(p);
                 }
                 else
@@ -145,7 +143,7 @@ RETRY:
 }
 
 // MPEG2 spec, 13818-2, 6.2.2
-size_t mpeg2_process_video_PES(uint8_t *p, size_t PES_packet_data_length)
+size_t mpeg2_parser::process_video_PES(uint8_t *p, size_t PES_packet_data_length)
 {
     uint8_t *pStart = p;
     size_t bytes_processed = 0;
@@ -154,14 +152,14 @@ size_t mpeg2_process_video_PES(uint8_t *p, size_t PES_packet_data_length)
 
     while(bytes_processed < PES_packet_data_length && !bDone)
     {
-        bytes_processed += mpeg2_process_video_frames(p, PES_packet_data_length, 1, frames_received);
+        bytes_processed += process_video_frames(p, PES_packet_data_length, 1, frames_received);
     }
 
     return p - pStart;
 }
 
 // MPEG2 spec, 13818-2, 6.2.2.1
-size_t mpeg2_process_sequence_header(uint8_t *&p)
+size_t mpeg2_parser::process_sequence_header(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
@@ -203,13 +201,13 @@ size_t mpeg2_process_sequence_header(uint8_t *&p)
     if(load_non_intra_quantizer_matrix)
         inc_ptr(p, 64);
 
-    g_next_mpeg2_extension_type = sequence_extension;
+    m_next_mpeg2_extension_type = sequence_extension;
 
     return p - pStart;
 }
 
 // MPEG2 spec, 13818-2, 6.2.2.3
-size_t mpeg2_process_sequence_extension(uint8_t *&p)
+size_t mpeg2_parser::process_sequence_extension(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
@@ -241,7 +239,7 @@ size_t mpeg2_process_sequence_extension(uint8_t *&p)
 }
 
 // MPEG2 spec, 13818-2, 6.2.2.4
-size_t mpeg2_process_sequence_display_extension(uint8_t *&p)
+size_t mpeg2_parser::process_sequence_display_extension(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
@@ -274,7 +272,7 @@ size_t mpeg2_process_sequence_display_extension(uint8_t *&p)
 }
 
 // MPEG2 spec, 13818-2, 6.2.2.5
-size_t mpeg2_process_sequence_scalable_extension(uint8_t *&p)
+size_t mpeg2_parser::process_sequence_scalable_extension(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
@@ -282,15 +280,15 @@ size_t mpeg2_process_sequence_scalable_extension(uint8_t *&p)
 }
 
 // MPEG2 spec, 13818-2, 6.2.2.2.1
-size_t mpeg2_process_extension_and_user_data_0(uint8_t *&p)
+size_t mpeg2_parser::process_extension_and_user_data_0(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
     if(sequence_display_extension_id == ((*p & 0xF0) >> 4))
-        mpeg2_process_sequence_display_extension(p);
+        process_sequence_display_extension(p);
 
     if(sequence_scalable_extension_id == ((*p & 0xF0) >> 4))
-        mpeg2_process_sequence_scalable_extension(p);
+        process_sequence_scalable_extension(p);
 
     return p - pStart;
 }
@@ -298,31 +296,31 @@ size_t mpeg2_process_extension_and_user_data_0(uint8_t *&p)
 // MPEG2 spec, 13818-2, 6.2.2.2.1
 //
 // The setting of g_next_mpeg2_extension_type follows the diagram of 6.2.2 Video Sequence
-size_t mpeg2_process_extension(uint8_t *&p)
+size_t mpeg2_parser::process_extension(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
     validate_start_code(p, extension_start_code);
 
-    switch(g_next_mpeg2_extension_type)
+    switch(m_next_mpeg2_extension_type)
     {
         case sequence_extension:
-            mpeg2_process_sequence_extension(p);
-            g_next_mpeg2_extension_type = extension_and_user_data_0;
+            process_sequence_extension(p);
+            m_next_mpeg2_extension_type = extension_and_user_data_0;
         break;
         
         case picture_coding_extension:
-            mpeg2_process_picture_coding_extension(p);
-            g_next_mpeg2_extension_type = extension_and_user_data_2;
+            process_picture_coding_extension(p);
+            m_next_mpeg2_extension_type = extension_and_user_data_2;
         break;
 
         case extension_and_user_data_0:
-            mpeg2_process_extension_and_user_data_0(p);
+            process_extension_and_user_data_0(p);
 
             //    The next extension can be either:
             //        extension_and_user_data_1 (Follows a GOP)
             //        extension_and_user_data_2 (Follows a picture_coding_extension)
-            g_next_mpeg2_extension_type = extension_unknown;
+            m_next_mpeg2_extension_type = extension_unknown;
         break;
 
         case extension_and_user_data_1:
@@ -336,7 +334,7 @@ size_t mpeg2_process_extension(uint8_t *&p)
 }
 
 // MPEG2 spec, 13818-2, 6.2.2.6
-size_t mpeg2_process_group_of_pictures_header(uint8_t *&p)
+size_t mpeg2_parser::process_group_of_pictures_header(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
@@ -351,13 +349,13 @@ size_t mpeg2_process_group_of_pictures_header(uint8_t *&p)
 
     printf_xml(2, "<closed_gop>%d</closed_gop>\n", closed_gop);
 
-    g_next_mpeg2_extension_type = extension_and_user_data_1;
+    m_next_mpeg2_extension_type = extension_and_user_data_1;
 
     return p - pStart;
 }
 
 // MPEG2 spec, 13818-2, 6.2.3
-size_t mpeg2_process_picture_header(uint8_t *&p)
+size_t mpeg2_parser::process_picture_header(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
@@ -412,13 +410,13 @@ size_t mpeg2_process_picture_header(uint8_t *&p)
     if(carry_over & (0x01 << (carry_over_bits-1)))
         assert(1); // TODO: Handle this case
 
-    g_next_mpeg2_extension_type = picture_coding_extension;
+    m_next_mpeg2_extension_type = picture_coding_extension;
 
     return p - pStart;
 }
 
 // MPEG2 spec, 13818-2, 6.2.3.1
-size_t mpeg2_process_picture_coding_extension(uint8_t *&p)
+size_t mpeg2_parser::process_picture_coding_extension(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
@@ -475,7 +473,7 @@ size_t mpeg2_process_picture_coding_extension(uint8_t *&p)
 }
 
 // MPEG2 spec, 13818-2, 6.2.2.2.2
-size_t mpeg2_process_user_data(uint8_t *&p)
+size_t mpeg2_parser::process_user_data(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
@@ -487,7 +485,7 @@ size_t mpeg2_process_user_data(uint8_t *&p)
 }
 
 // MPEG2 spec, 13818-2, 6.2.4
-size_t mpeg2_process_slice(uint8_t *&p)
+size_t mpeg2_parser::process_slice(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
