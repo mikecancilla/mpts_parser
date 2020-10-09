@@ -382,7 +382,7 @@ int16_t mpts_parser::read_pat(uint8_t *&p, bool payload_unit_start)
 // 2.4.4.8 Program Map Table
 //
 // The Program Map Table provides the mappings between program numbers and the program elements that comprise
-// them.A single instance of such a mapping is referred to as a "program definition".The program map table is the
+// them. A single instance of such a mapping is referred to as a "program definition". The program map table is the
 // complete collection of all program definitions for a Transport Stream.
 int16_t mpts_parser::read_pmt(uint8_t *&p, bool payload_unit_start)
 {
@@ -989,7 +989,7 @@ size_t mpts_parser::read_descriptors(uint8_t *p, uint16_t program_info_length)
 }
 
 // http://dvd.sourceforge.net/dvdinfo/pes-hdr.html
-size_t mpts_parser::process_PES_packet_header(uint8_t *&p)
+size_t mpts_parser::process_PES_packet_header(uint8_t *&p, size_t PES_packet_data_length)
 {
     uint8_t *pStart = p;
 
@@ -999,266 +999,295 @@ size_t mpts_parser::process_PES_packet_header(uint8_t *&p)
     uint32_t packet_start_code_prefix = (four_bytes & 0xffffff00) >> 8;
     uint8_t stream_id = four_bytes & 0xff;
 
-    /* 2.4.3.7
+    /* MPTS spec - 2.4.3.7
       PES_packet_length – A 16-bit field specifying the number of bytes in the PES packet following the last byte of the field.
       A value of 0 indicates that the PES packet length is neither specified nor bounded and is allowed only in
       PES packets whose payload consists of bytes from a video elementary stream contained in Transport Stream packets.
     */
 
-    int64_t PES_packet_length = read_2_bytes(p+4);
+    int64_t PES_packet_length = read_2_bytes(p);
     inc_ptr(p, 2);
 
-    uint8_t byte = *p;
-    inc_ptr(p, 1);
+    if (0 == PES_packet_length)
+        PES_packet_length = PES_packet_data_length - 6;
 
-    uint8_t PES_scrambling_control = (byte & 0x30) >> 4;
-    uint8_t PES_priority = (byte & 0x08) >> 3;
-    uint8_t data_alignment_indicator = (byte & 0x04) >> 2;
-    uint8_t copyright = (byte & 0x02) >> 1;
-    uint8_t original_or_copy = byte & 0x01;
-
-    byte = *p;
-    inc_ptr(p, 1);
-
-    uint8_t PTS_DTS_flags = (byte & 0xC0) >> 6;
-    uint8_t ESCR_flag = (byte & 0x20) >> 5;
-    uint8_t ES_rate_flag = (byte & 0x10) >> 4;
-    uint8_t DSM_trick_mode_flag = (byte & 0x08) >> 3;
-    uint8_t additional_copy_info_flag = (byte & 0x04) >> 2;
-    uint8_t PES_CRC_flag = (byte & 0x02) >> 1;
-    uint8_t PES_extension_flag = byte & 0x01;
-
-    /*
-        PES_header_data_length – An 8-bit field specifying the total number of bytes occupied by the optional fields and any
-        stuffing bytes contained in this PES packet header. The presence of optional fields is indicated in the byte that precedes
-        the PES_header_data_length field.
-    */
-    uint8_t PES_header_data_length = *p;
-    inc_ptr(p, 1);
-
-    static uint64_t PTS_last = 0;
-
-    if(2 == PTS_DTS_flags)
-    {
-        uint64_t PTS = read_time_stamp(p);
-        printf_xml(2, "<DTS>%llu (%f)</DTS>\n", PTS, convert_time_stamp(PTS));
-        printf_xml(2, "<PTS>%llu (%f)</PTS>\n", PTS, convert_time_stamp(PTS));
-    }
-
-    static uint64_t DTS_last = 0;
-
-    if(3 == PTS_DTS_flags)
-    {
-        uint64_t PTS = read_time_stamp(p);
-        uint64_t DTS = read_time_stamp(p);
-
-        printf_xml(2, "<DTS>%llu (%f)</DTS>\n", DTS, convert_time_stamp(DTS));
-        printf_xml(2, "<PTS>%llu (%f)</PTS>\n", PTS, convert_time_stamp(PTS));
-    }
-
-    if(ESCR_flag) // 6 bytes
-    {
-        uint32_t byte = *p;
-        inc_ptr(p, 1);
-
-        // 31, 31, 30
-        uint32_t ESCR = (byte & 0x38) << 27;
-
-        // 29, 28
-        ESCR |= (byte & 0x03) << 29;
-
-        byte = *p;
-        inc_ptr(p, 1);
-
-        // 27, 26, 25, 24, 23, 22, 21, 20
-        ESCR |= byte << 19;
-
-        byte = *p;
-        inc_ptr(p, 1);
-
-        // 19, 18, 17, 16, 15
-        ESCR |= (byte & 0xF8) << 11;
-
-        // 14, 13
-        ESCR |= (byte & 0x03) << 13;
-
-        byte = *p;
-        inc_ptr(p, 1);
-
-        // 12, 11, 10, 9, 8, 7, 6, 5
-        ESCR |= byte << 4;
-
-        byte = *p;
-        inc_ptr(p, 1);
-
-        // 4, 3, 2, 1, 0
-        ESCR |= (byte & 0xF8) >> 3;
-
-        uint32_t ESCR_ext = (byte & 0x03) << 7;
-
-        byte = *p;
-        inc_ptr(p, 1);
-
-        ESCR_ext |= (byte & 0xFE) >> 1;
-    }
-
-    if(ES_rate_flag)
-    {
-        uint32_t four_bytes = *p;
-        inc_ptr(p, 1);
-        four_bytes <<= 8;
-
-        four_bytes |= *p;
-        inc_ptr(p, 1);
-        four_bytes <<= 8;
-
-        four_bytes |= *p;
-        inc_ptr(p, 1);
-        four_bytes <<= 8;
-
-        uint32_t ES_rate = (four_bytes & 0x7FFFFE) >> 1;
-    }
-
-    if(DSM_trick_mode_flag)
-    {
-        // Table 2-24 – Trick mode control values
-        // Value Description
-        // '000' Fast forward
-        // '001' Slow motion
-        // '010' Freeze frame
-        // '011' Fast reverse
-        // '100' Slow reverse
-        // '101'-'111' Reserved
-
-        uint8_t byte = *p;
-        inc_ptr(p, 1);
-
-        uint8_t trick_mode_control = byte >> 5;
-
-        if(0 == trick_mode_control) // Fast forward
-        {
-            uint8_t field_id = (byte & 0x18) >> 3;
-            uint8_t intra_slice_refresh = (byte & 0x04) >> 2;
-            uint8_t frequency_truncation = byte & 0x03;
-        }
-        else if(1 == trick_mode_control) // Slow motion
-        {
-            uint8_t rep_cntrl = byte & 0x1f;
-        }
-        else if(2 == trick_mode_control) // Freeze frame
-        {
-            uint8_t field_id = (byte & 0x18) >> 3;
-        }
-        else if(3 == trick_mode_control) // Fast reverse
-        {
-            uint8_t field_id = (byte & 0x18) >> 3;
-            uint8_t intra_slice_refresh = (byte & 0x04) >> 2;
-            uint8_t frequency_truncation = byte & 0x03;
-        }
-        else if(4 == trick_mode_control) // Slow reverse
-        {
-            uint8_t rep_cntrl = byte & 0x1f;
-        }
-    }
-
-    if(additional_copy_info_flag)
+    if (stream_id != program_stream_map &&
+        stream_id != padding_stream &&
+        stream_id != private_stream_2 &&
+        stream_id != ECM_stream &&
+        stream_id != EMM_stream &&
+        stream_id != program_stream_directory &&
+        stream_id != DSMCC_stream &&
+        stream_id != itu_h222_e_stream)
     {
         uint8_t byte = *p;
         inc_ptr(p, 1);
 
-        uint8_t additional_copy_info = byte & 0x7F;
-    }
+        uint8_t PES_scrambling_control = (byte & 0x30) >> 4;
+        uint8_t PES_priority = (byte & 0x08) >> 3;
+        uint8_t data_alignment_indicator = (byte & 0x04) >> 2;
+        uint8_t copyright = (byte & 0x02) >> 1;
+        uint8_t original_or_copy = byte & 0x01;
 
-    if(PES_CRC_flag)
-    {
-        uint16_t previous_PES_packet_CRC = read_2_bytes(p);
-        inc_ptr(p, 2);
-    }
-
-    if(PES_extension_flag)
-    {
-        uint8_t byte = *p;
+        byte = *p;
         inc_ptr(p, 1);
 
-        uint8_t PES_private_data_flag = (byte & 0x80) >> 7;
-        uint8_t pack_header_field_flag = (byte & 0x40) >> 6;
-        uint8_t program_packet_sequence_counter_flag = (byte & 0x20) >> 5;
-        uint8_t P_STD_buffer_flag = (byte & 0x10) >> 4;
-        // 3 bits Reserved
-        uint8_t PES_extension_flag_2 = byte & 0x01;
+        uint8_t PTS_DTS_flags = (byte & 0xC0) >> 6;
+        uint8_t ESCR_flag = (byte & 0x20) >> 5;
+        uint8_t ES_rate_flag = (byte & 0x10) >> 4;
+        uint8_t DSM_trick_mode_flag = (byte & 0x08) >> 3;
+        uint8_t additional_copy_info_flag = (byte & 0x04) >> 2;
+        uint8_t PES_CRC_flag = (byte & 0x02) >> 1;
+        uint8_t PES_extension_flag = byte & 0x01;
 
-        if(PES_private_data_flag)
+        /*
+            PES_header_data_length – An 8-bit field specifying the total number of bytes occupied by the optional fields and any
+            stuffing bytes contained in this PES packet header. The presence of optional fields is indicated in the byte that precedes
+            the PES_header_data_length field.
+        */
+        uint8_t PES_header_data_length = *p;
+        inc_ptr(p, 1);
+
+        static uint64_t PTS_last = 0;
+
+        if(2 == PTS_DTS_flags)
         {
-            uint8_t PES_private_data[16];
-            std::memcpy(PES_private_data, p, 16);
-            inc_ptr(p, 16);
+            uint64_t PTS = read_time_stamp(p);
+            printf_xml(2, "<DTS>%llu (%f)</DTS>\n", PTS, convert_time_stamp(PTS));
+            printf_xml(2, "<PTS>%llu (%f)</PTS>\n", PTS, convert_time_stamp(PTS));
         }
 
-        if(pack_header_field_flag)
+        static uint64_t DTS_last = 0;
+
+        if(3 == PTS_DTS_flags)
         {
-            uint8_t pack_field_length = *p;
+            uint64_t PTS = read_time_stamp(p);
+            uint64_t DTS = read_time_stamp(p);
+
+            printf_xml(2, "<DTS>%llu (%f)</DTS>\n", DTS, convert_time_stamp(DTS));
+            printf_xml(2, "<PTS>%llu (%f)</PTS>\n", PTS, convert_time_stamp(PTS));
+        }
+
+        if(ESCR_flag) // 6 bytes
+        {
+            uint32_t byte = *p;
             inc_ptr(p, 1);
 
-            // pack_header is here
-            // http://stnsoft.com/DVD/packhdr.html
+            // 31, 31, 30
+            uint32_t ESCR = (byte & 0x38) << 27;
 
-            inc_ptr(p, pack_field_length);
-        }
-
-        if(program_packet_sequence_counter_flag)
-        {
-            uint8_t byte = *p;
-            inc_ptr(p, 1);
-
-            uint8_t program_packet_sequence_counter = byte & 0x07F;
+            // 29, 28
+            ESCR |= (byte & 0x03) << 29;
 
             byte = *p;
             inc_ptr(p, 1);
 
-            uint8_t MPEG1_MPEG2_identifier = (byte & 0x40) >> 6;
-        }
-
-        if(P_STD_buffer_flag)
-        {
-            uint16_t two_bytes = read_2_bytes(p);
-            inc_ptr(p, 2);
-
-            uint8_t P_STD_buffer_scale = (two_bytes & 0x2000) >> 13;
-            uint8_t P_STD_buffer_size = two_bytes & 0x1FFF;
-        }
-
-        if(PES_extension_flag_2)
-        {
-            uint8_t byte = *p;
-            inc_ptr(p, 1);
-
-            uint8_t PES_extension_field_length = byte & 0x7F;
+            // 27, 26, 25, 24, 23, 22, 21, 20
+            ESCR |= byte << 19;
 
             byte = *p;
             inc_ptr(p, 1);
 
-            uint8_t stream_id_extension_flag = (byte & 0x80) >> 7;
+            // 19, 18, 17, 16, 15
+            ESCR |= (byte & 0xF8) << 11;
 
-            if(0 == stream_id_extension_flag)
+            // 14, 13
+            ESCR |= (byte & 0x03) << 13;
+
+            byte = *p;
+            inc_ptr(p, 1);
+
+            // 12, 11, 10, 9, 8, 7, 6, 5
+            ESCR |= byte << 4;
+
+            byte = *p;
+            inc_ptr(p, 1);
+
+            // 4, 3, 2, 1, 0
+            ESCR |= (byte & 0xF8) >> 3;
+
+            uint32_t ESCR_ext = (byte & 0x03) << 7;
+
+            byte = *p;
+            inc_ptr(p, 1);
+
+            ESCR_ext |= (byte & 0xFE) >> 1;
+        }
+
+        if(ES_rate_flag)
+        {
+            uint32_t four_bytes = *p;
+            inc_ptr(p, 1);
+            four_bytes <<= 8;
+
+            four_bytes |= *p;
+            inc_ptr(p, 1);
+            four_bytes <<= 8;
+
+            four_bytes |= *p;
+            inc_ptr(p, 1);
+            four_bytes <<= 8;
+
+            uint32_t ES_rate = (four_bytes & 0x7FFFFE) >> 1;
+        }
+
+        if(DSM_trick_mode_flag)
+        {
+            // Table 2-24 – Trick mode control values
+            // Value Description
+            // '000' Fast forward
+            // '001' Slow motion
+            // '010' Freeze frame
+            // '011' Fast reverse
+            // '100' Slow reverse
+            // '101'-'111' Reserved
+
+            uint8_t byte = *p;
+            inc_ptr(p, 1);
+
+            uint8_t trick_mode_control = byte >> 5;
+
+            if(0 == trick_mode_control) // Fast forward
             {
-                uint8_t stream_id_extension = byte & 0x7F;
-
-                // Reserved
-
-                inc_ptr(p, PES_extension_field_length);
+                uint8_t field_id = (byte & 0x18) >> 3;
+                uint8_t intra_slice_refresh = (byte & 0x04) >> 2;
+                uint8_t frequency_truncation = byte & 0x03;
+            }
+            else if(1 == trick_mode_control) // Slow motion
+            {
+                uint8_t rep_cntrl = byte & 0x1f;
+            }
+            else if(2 == trick_mode_control) // Freeze frame
+            {
+                uint8_t field_id = (byte & 0x18) >> 3;
+            }
+            else if(3 == trick_mode_control) // Fast reverse
+            {
+                uint8_t field_id = (byte & 0x18) >> 3;
+                uint8_t intra_slice_refresh = (byte & 0x04) >> 2;
+                uint8_t frequency_truncation = byte & 0x03;
+            }
+            else if(4 == trick_mode_control) // Slow reverse
+            {
+                uint8_t rep_cntrl = byte & 0x1f;
             }
         }
+
+        if(additional_copy_info_flag)
+        {
+            uint8_t byte = *p;
+            inc_ptr(p, 1);
+
+            uint8_t additional_copy_info = byte & 0x7F;
+        }
+
+        if(PES_CRC_flag)
+        {
+            uint16_t previous_PES_packet_CRC = read_2_bytes(p);
+            inc_ptr(p, 2);
+        }
+
+        if(PES_extension_flag)
+        {
+            uint8_t byte = *p;
+            inc_ptr(p, 1);
+
+            uint8_t PES_private_data_flag = (byte & 0x80) >> 7;
+            uint8_t pack_header_field_flag = (byte & 0x40) >> 6;
+            uint8_t program_packet_sequence_counter_flag = (byte & 0x20) >> 5;
+            uint8_t P_STD_buffer_flag = (byte & 0x10) >> 4;
+            // 3 bits Reserved
+            uint8_t PES_extension_flag_2 = byte & 0x01;
+
+            if(PES_private_data_flag)
+            {
+                uint8_t PES_private_data[16];
+                std::memcpy(PES_private_data, p, 16);
+                inc_ptr(p, 16);
+            }
+
+            if(pack_header_field_flag)
+            {
+                uint8_t pack_field_length = *p;
+                inc_ptr(p, 1);
+
+                // pack_header is here
+                // http://stnsoft.com/DVD/packhdr.html
+
+                inc_ptr(p, pack_field_length);
+            }
+
+            if(program_packet_sequence_counter_flag)
+            {
+                uint8_t byte = *p;
+                inc_ptr(p, 1);
+
+                uint8_t program_packet_sequence_counter = byte & 0x07F;
+
+                byte = *p;
+                inc_ptr(p, 1);
+
+                uint8_t MPEG1_MPEG2_identifier = (byte & 0x40) >> 6;
+            }
+
+            if(P_STD_buffer_flag)
+            {
+                uint16_t two_bytes = read_2_bytes(p);
+                inc_ptr(p, 2);
+
+                uint8_t P_STD_buffer_scale = (two_bytes & 0x2000) >> 13;
+                uint8_t P_STD_buffer_size = two_bytes & 0x1FFF;
+            }
+
+            if(PES_extension_flag_2)
+            {
+                uint8_t byte = *p;
+                inc_ptr(p, 1);
+
+                uint8_t PES_extension_field_length = byte & 0x7F;
+
+                byte = *p;
+                inc_ptr(p, 1);
+
+                uint8_t stream_id_extension_flag = (byte & 0x80) >> 7;
+
+                if(0 == stream_id_extension_flag)
+                {
+                    uint8_t stream_id_extension = byte & 0x7F;
+
+                    // Reserved
+
+                    inc_ptr(p, PES_extension_field_length);
+                }
+            }
+        }
+
+        /*
+            From the TS spec:
+            stuffing_byte – This is a fixed 8-bit value equal to '1111 1111' that can be inserted by the encoder, for example to meet
+            the requirements of the channel. It is discarded by the decoder. No more than 32 stuffing bytes shall be present in one
+            PES packet header.
+        */
+
+        while(*p == 0xFF)
+            inc_ptr(p,1);
     }
-
-    /*
-        From the TS spec:
-        stuffing_byte – This is a fixed 8-bit value equal to '1111 1111' that can be inserted by the encoder, for example to meet
-        the requirements of the channel. It is discarded by the decoder. No more than 32 stuffing bytes shall be present in one
-        PES packet header.
-    */
-
-    while(*p == 0xFF)
-        inc_ptr(p,1);
+    else if (stream_id == program_stream_map ||
+             stream_id == private_stream_2 ||
+             stream_id == ECM_stream ||
+             stream_id == EMM_stream ||
+             stream_id == program_stream_directory ||
+             stream_id == DSMCC_stream ||
+             stream_id == itu_h222_e_stream)
+    {
+        // PES_packet_data here
+        inc_ptr(p, PES_packet_length);
+    }
+    else if (stream_id == padding_stream)
+    {
+        // Padding bytes here
+        inc_ptr(p, PES_packet_length);
+    }
 
     return p - pStart;
 }
@@ -1785,14 +1814,19 @@ float mpts_parser::convert_time_stamp(uint64_t time_stamp)
     return (float) time_stamp / 90000.f;
 }
 
-size_t mpts_parser::process_video_frames(uint8_t *p, size_t PES_packet_data_length, mpts_e_stream_type streamType, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out)
+size_t mpts_parser::process_video_frames(uint8_t *p,
+                                         size_t PES_packet_data_length,
+                                         mpts_e_stream_type streamType,
+                                         unsigned int frames_wanted,
+                                         unsigned int &frames_received,
+                                         bool b_xml_out)
 {
     uint8_t *pStart = p;
     size_t bytes_processed = 0;
     bool bDone = false;
     frames_received = 0;
 
-    while(bytes_processed < PES_packet_data_length && !bDone)
+    while(bytes_processed < (PES_packet_data_length - 4) && !bDone)
     {
 RETRY:
         uint32_t start_code = read_4_bytes(p);
@@ -1823,8 +1857,15 @@ RETRY:
             }
             else
             {
-                bytes_processed += process_PES_packet_header(p);
-                //bytes_processed += skip_to_next_start_code(p);
+                bytes_processed += process_PES_packet_header(p, PES_packet_data_length);
+
+                // Sometimes we come out of process_PES_packet_header and we are not at 0x00000001, I don't know why...
+                // So, for now, if we are not at 0x00000001, lets find it.
+
+                uint32_t four_bytes = read_4_bytes(p);
+
+                if(0x00000001 != four_bytes)
+                    bytes_processed += next_nalu_start_code(p);
             }
 
 //            continue;
@@ -1833,7 +1874,7 @@ RETRY:
         //switch(streamType)
         //{
         //    case eMPEG2_Video:
-                bytes_processed = m_parser->process_video_frames(p, PES_packet_data_length, frames_wanted, frames_received, b_xml_out);
+                bytes_processed += m_parser->process_video_frames(p, PES_packet_data_length - bytes_processed, frames_wanted, frames_received, b_xml_out);
         //    break;
         //}
 

@@ -219,8 +219,6 @@ int main(int argc, char* argv[])
         else
             packet += packet_size;
 
-        assert(packet_buffer_size > 0);
-
         packet_num++;
     }
 

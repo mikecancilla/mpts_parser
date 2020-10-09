@@ -32,18 +32,18 @@
 
 inline uint16_t read_2_bytes(uint8_t *p)
 {
-	uint16_t ret = *p++;
-	ret <<= 8;
-	ret |= *p++;
+    uint16_t ret = *p++;
+    ret <<= 8;
+    ret |= *p++;
 
-	return ret;
+    return ret;
 }
 
 inline uint32_t read_4_bytes(uint8_t *p)
 {
     uint32_t ret = 0;
     uint32_t val = *p++;
-    ret = val<<24;
+    ret = val << 24;
     val = *p++;
     ret |= val << 16;
     val = *p++;
@@ -59,6 +59,7 @@ inline size_t increment_ptr(uint8_t *&p, size_t bytes)
     return bytes;
 }
 
+// Search for 0x00 00 01
 size_t inline next_start_code(uint8_t *&p, size_t data_length = -1)
 {
     size_t count = 0;
@@ -73,7 +74,29 @@ size_t inline next_start_code(uint8_t *&p, size_t data_length = -1)
         count++;
     }
 
-    if(-1 == count)
+    if (0 == count)
+        return count;
+
+    return p - pStart;
+}
+
+// Search for 0x00 00 00 01
+size_t inline next_nalu_start_code(uint8_t *&p, size_t data_length = -1)
+{
+    size_t count = 0;
+    uint8_t *pStart = p;
+
+    while(    *p != 0 ||
+          *(p+1) != 0 ||
+          *(p+2) != 0 ||
+          *(p+3) != 1 &&
+          count < data_length)
+    {
+        increment_ptr(p, 1);
+        count++;
+    }
+
+    if (0 == count)
         return count;
 
     return p - pStart;

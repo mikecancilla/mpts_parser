@@ -241,7 +241,7 @@ public:
     int16_t read_pmt(uint8_t *&p, bool payload_unit_start);
     size_t read_descriptors(uint8_t *p, uint16_t program_info_length);
 
-    size_t process_PES_packet_header(uint8_t *&p);
+    size_t process_PES_packet_header(uint8_t *&p, size_t PES_packet_data_length);
     size_t process_PES_packet(uint8_t *&packet_start, uint8_t *&p, mpts_e_stream_type stream_type, bool payload_unit_start);
     int16_t process_pid(uint16_t pid, uint8_t *&packet_start, uint8_t *&p, int64_t packet_start_in_file, size_t packet_num, bool payload_unit_start, uint8_t adaptation_field_length);
     uint8_t get_adaptation_field_length(uint8_t *&p);
