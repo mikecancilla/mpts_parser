@@ -24,6 +24,7 @@
 
 #pragma once
 
+#include <string>
 #include <vector>
 #include <map>
 #include <memory>
@@ -125,7 +126,7 @@ enum mpts_e_stream_id
 
 // Process each PID (Packet Identifier) for each 188 byte packet
 //
-// Table 2-3 – PID table
+// Table 2-3 â€“ PID table
 /*
     Value           Description
     -----           -----------
@@ -136,7 +137,7 @@ enum mpts_e_stream_id
     0x0004-0x000F   Reserved
     0x0010-0x1FFE   May be assigned as network_PID, Program_map_PID, elementary_PID, or for other purposes
     0x1FFF          Null packet
-    NOTE – The transport packets with PID values 0x0000, 0x0001, and 0x0010-0x1FFE are allowed to carry a PCR.
+    NOTE â€“ The transport packets with PID values 0x0000, 0x0001, and 0x0010-0x1FFE are allowed to carry a PCR.
 */
 
 // https://en.wikipedia.org/wiki/MPEG_transport_stream#Packet_identifier_(PID)
@@ -148,9 +149,9 @@ Decimal	    Hexadecimal	    Description
 1	        0x0001	        Conditional access table (CAT) contains a directory listing of all ITU-T Rec. H.222 entitlement management message streams used by program map tables
 2	        0x0002	        Transport stream description table (TSDT) contains descriptors relating to the overall transport stream
 3	        0x0003	        IPMP control information table contains a directory listing of all ISO/IEC 14496-13 control streams used by program map tables
-4–15	    0x0004-0x000F	Reserved for future use
+4â€“15	    0x0004-0x000F	Reserved for future use
 -----------------------
-16–31	    0x0010-0x001F	Used by DVB metadata[10]
+16â€“31	    0x0010-0x001F	Used by DVB metadata[10]
             0x0010: NIT, ST
             0x0011: SDT, BAT, ST
             0x0012: EIT, ST, CIT
@@ -166,7 +167,7 @@ Decimal	    Hexadecimal	    Description
 -----------------------
 32-8186	    0x0020-0x1FFA	May be assigned as needed to program map tables, elementary streams and other data tables
 8187	    0x1FFB	Used by DigiCipher 2/ATSC MGT metadata
-8188–8190	0x1FFC-0x1FFE	May be assigned as needed to program map tables, elementary streams and other data tables
+8188â€“8190	0x1FFC-0x1FFE	May be assigned as needed to program map tables, elementary streams and other data tables
 8191	    0x1FFF	        Null Packet (used for fixed bandwidth padding)
 */
 
