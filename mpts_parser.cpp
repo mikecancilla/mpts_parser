@@ -633,7 +633,7 @@ size_t mpts_parser::read_descriptors(uint8_t *p, uint16_t program_info_length)
                 inc_ptr(p, 4);
 
                 if(0x43554549 == format_identifier)
-                    scte35_format_identifier = format_identifier; // Should be 0x43554549 (ASCII “CUEI”)
+                    scte35_format_identifier = format_identifier; // Should be 0x43554549 (ASCII Â“CUEIÂ”)
 
                 inc_ptr(p, descriptor_length - 4);
 
@@ -1000,7 +1000,7 @@ size_t mpts_parser::process_PES_packet_header(uint8_t *&p, size_t PES_packet_dat
     uint8_t stream_id = four_bytes & 0xff;
 
     /* MPTS spec - 2.4.3.7
-      PES_packet_length – A 16-bit field specifying the number of bytes in the PES packet following the last byte of the field.
+      PES_packet_length Â– A 16-bit field specifying the number of bytes in the PES packet following the last byte of the field.
       A value of 0 indicates that the PES packet length is neither specified nor bounded and is allowed only in
       PES packets whose payload consists of bytes from a video elementary stream contained in Transport Stream packets.
     */
@@ -1041,7 +1041,7 @@ size_t mpts_parser::process_PES_packet_header(uint8_t *&p, size_t PES_packet_dat
         uint8_t PES_extension_flag = byte & 0x01;
 
         /*
-            PES_header_data_length – An 8-bit field specifying the total number of bytes occupied by the optional fields and any
+            PES_header_data_length Â– An 8-bit field specifying the total number of bytes occupied by the optional fields and any
             stuffing bytes contained in this PES packet header. The presence of optional fields is indicated in the byte that precedes
             the PES_header_data_length field.
         */
@@ -1133,7 +1133,7 @@ size_t mpts_parser::process_PES_packet_header(uint8_t *&p, size_t PES_packet_dat
 
         if(DSM_trick_mode_flag)
         {
-            // Table 2-24 – Trick mode control values
+            // Table 2-24 Â– Trick mode control values
             // Value Description
             // '000' Fast forward
             // '001' Slow motion
@@ -1264,7 +1264,7 @@ size_t mpts_parser::process_PES_packet_header(uint8_t *&p, size_t PES_packet_dat
 
         /*
             From the TS spec:
-            stuffing_byte – This is a fixed 8-bit value equal to '1111 1111' that can be inserted by the encoder, for example to meet
+            stuffing_byte Â– This is a fixed 8-bit value equal to '1111 1111' that can be inserted by the encoder, for example to meet
             the requirements of the channel. It is discarded by the decoder. No more than 32 stuffing bytes shall be present in one
             PES packet header.
         */
@@ -1313,7 +1313,7 @@ size_t mpts_parser::process_PES_packet(uint8_t *&packet_start, uint8_t *&p, mpts
     uint8_t stream_id = four_bytes & 0xff;
 
     /* 2.4.3.7
-      PES_packet_length – A 16-bit field specifying the number of bytes in the PES packet following the last byte of the field.
+      PES_packet_length Â– A 16-bit field specifying the number of bytes in the PES packet following the last byte of the field.
       A value of 0 indicates that the PES packet length is neither specified nor bounded and is allowed only in
       PES packets whose payload consists of bytes from a video elementary stream contained in Transport Stream packets.
     */
@@ -1411,9 +1411,9 @@ Decimal	    Hexadecimal	    Description
 1	        0x0001	        Conditional access table (CAT) contains a directory listing of all ITU-T Rec. H.222 entitlement management message streams used by program map tables
 2	        0x0002	        Transport stream description table (TSDT) contains descriptors relating to the overall transport stream
 3	        0x0003	        IPMP control information table contains a directory listing of all ISO/IEC 14496-13 control streams used by program map tables
-4–15	    0x0004-0x000F	Reserved for future use
+4Â–15	    0x0004-0x000F	Reserved for future use
 -----------------------
-16–31	    0x0010-0x001F	Used by DVB metadata[10]
+16Â–31	    0x0010-0x001F	Used by DVB metadata[10]
             0x0010: NIT, ST
             0x0011: SDT, BAT, ST
             0x0012: EIT, ST, CIT
@@ -1429,7 +1429,7 @@ Decimal	    Hexadecimal	    Description
 -----------------------
 32-8186	    0x0020-0x1FFA	May be assigned as needed to program map tables, elementary streams and other data tables
 8187	    0x1FFB	Used by DigiCipher 2/ATSC MGT metadata
-8188–8190	0x1FFC-0x1FFE	May be assigned as needed to program map tables, elementary streams and other data tables
+8188Â–8190	0x1FFC-0x1FFE	May be assigned as needed to program map tables, elementary streams and other data tables
 8191	    0x1FFF	        Null Packet (used for fixed bandwidth padding)
 */
 
@@ -1748,7 +1748,7 @@ int16_t mpts_parser::process_packet(uint8_t *packet, size_t packetNum)
 
     uint8_t transport_scrambling_control = (final_byte & 0xC0) >> 6;
     uint8_t adaptation_field_control = (final_byte & 0x30) >> 4;
-    uint8_t continuity_counter = (final_byte & 0x0F) >> 4;
+    uint8_t continuity_counter = (final_byte & 0x0F);
 
     if(false == m_b_terse)
     {
@@ -1762,7 +1762,7 @@ int16_t mpts_parser::process_packet(uint8_t *packet, size_t packetNum)
     }
 
     /*
-        Table 2-5 – Adaptation field control values
+        Table 2-5 Â– Adaptation field control values
             Value  Description
              00    Reserved for future use by ISO/IEC
              01    No adaptation_field, payload only
