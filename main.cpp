@@ -73,10 +73,10 @@ int main(int argc, char* argv[])
 {
 //    tinyxml2::XMLDocument* doc = new tinyxml2::XMLDocument();
 
-    if (0 == argc)
+    if (1 == argc)
     {
         fprintf(stderr, "%s: Output extensive xml representation of MP2TS file to stdout\n", argv[0]);
-        fprintf(stderr, "Usage: %s [-g] [-p] [-q] mp2ts_file\n", argv[0]);
+        fprintf(stderr, "Usage: %s [-e] [-p] [-q] [-v] mp2ts_file\n", argv[0]);
         fprintf(stderr, "-e: Also analyze the video elementary stream in the MP2TS\n");
         fprintf(stderr, "-p: Print progress on a single line to stderr\n");
         fprintf(stderr, "-q: No output. Run through the file and only print errors\n");

@@ -126,6 +126,7 @@ size_t avc_parser::process_video_frames(uint8_t *p, size_t PES_packet_data_lengt
             case eAVCNaluType_CodedSliceIdrPicture:
                 printf_xml(2, "<closed_gop>%d</closed_gop>\n", 1);
 
+            case eAVCNaluType_CodedSliceAuxiliaryPicture:
             case eAVCNaluType_CodedSliceNonIdrPicture:
                 process_slice_layer_without_partitioning(p);
                 //p += NumBytesInNALunit - (p - p_nalu_data_start);
@@ -360,6 +361,26 @@ size_t avc_parser::process_access_unit_delimiter(uint8_t*& p)
     return p - pStart;
 }
 
+// Exp-Golomb Parse, Clause 9.1
+uint8_t avc_parser::EGParse(BitStream &bs, uint32_t &bitsRead)
+{
+    (void)bitsRead;
+    uint8_t codeNum = 0;
+    int8_t leadingZeroBits = -1;
+    uint8_t b = 0;
+
+    for (b=0; !b; ++leadingZeroBits)
+    {
+        b = bs.GetBits(1);
+    }
+
+    codeNum = std::pow(2, leadingZeroBits) - 1;
+    codeNum += bs.GetBits(leadingZeroBits);
+
+    return codeNum;
+}
+
+/*
 uint8_t avc_parser::EGParse(BitStream &bs, uint32_t &bitsRead)
 {
     uint8_t ret = 0;
@@ -384,3 +405,4 @@ uint8_t avc_parser::EGParse(BitStream &bs, uint32_t &bitsRead)
 
     return ret;
 }
+*/
