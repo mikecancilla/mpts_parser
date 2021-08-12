@@ -374,7 +374,7 @@ uint8_t avc_parser::EGParse(BitStream &bs, uint32_t &bitsRead)
         b = bs.GetBits(1);
     }
 
-    codeNum = std::pow(2, leadingZeroBits) - 1;
+    codeNum = static_cast<uint8_t>(std::pow(2, leadingZeroBits) - 1);
     codeNum += bs.GetBits(leadingZeroBits);
 
     return codeNum;
