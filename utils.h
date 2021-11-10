@@ -39,6 +39,18 @@ inline uint16_t read_2_bytes(uint8_t *p)
     return ret;
 }
 
+inline uint32_t read_3_bytes(uint8_t* p)
+{
+    uint32_t ret = 0;
+    uint32_t val = *p++;
+    ret |= val << 16;
+    val = *p++;
+    ret |= val << 8;
+    ret |= *p;
+
+    return ret;
+}
+
 inline uint32_t read_4_bytes(uint8_t *p)
 {
     uint32_t ret = 0;

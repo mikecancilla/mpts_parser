@@ -72,6 +72,9 @@
 #define MUXCODE_DESCRIPTOR                      ((uint8_t) 33)
 #define FMXBUFFERSIZE_DESCRIPTOR                ((uint8_t) 34)
 #define MULTIPLEXBUFFER_DESCRIPTOR              ((uint8_t) 35)
+
+#define sync_byte 0x47
+
 //#define 36 - 63 n / a n / a ITU - T Rec.H.222.0 | ISO / IEC 13818 - 1 Reserved
 //#define 64 - 255 n / a n / a User Private
 
@@ -1722,7 +1725,7 @@ int16_t mpts_parser::process_packet(uint8_t *packet, size_t packetNum)
 
     p = packet;
 
-    if (0x47 != *p)
+    if (sync_byte != *p)
     {
         printf_xml(2, "<error>Packet %zd does not start with 0x47</error>\n", packetNum);
         fprintf(stderr, "Error: Packet %zd does not start with 0x47\n", packetNum);
@@ -1889,9 +1892,9 @@ RETRY:
 // See: https://github.com/lerks/BluRay/wiki/M2TS
 int mpts_parser::determine_packet_size(uint8_t buffer[5])
 {
-    if(0x47 == buffer[0])
+    if(sync_byte == buffer[0])
         m_packet_size = 188;
-    else if(0x47 == buffer[4])
+    else if(sync_byte == buffer[4])
         m_packet_size = 192;
     else
         return -1;

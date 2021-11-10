@@ -32,23 +32,32 @@ size_t avc_parser::process_video_frames(uint8_t *p, size_t PES_packet_data_lengt
 
     while((size_t) (p - packet_start) < PES_packet_data_length && !bDone)
     {
-        uint32_t four_bytes = read_4_bytes(p);
-        increment_ptr(p, 4);
+        // See section: B.2 Byte stream NAL unit decoding process
+        // Eat leading_zero_8bits and trailing_zero_8bits with this loop
+        uint32_t three_bytes = read_3_bytes(p);
+        while (0x000001 != three_bytes)
+        {
+            increment_ptr(p, 1);
+            three_bytes = read_3_bytes(p);
+        }
+
+        increment_ptr(p, 3);
 
         int64_t NumBytesInNALunit = 0;
-        if(0x00000001 == four_bytes)
+        if (0x000001 == three_bytes)
         {
             uint8_t *p_nalu_start = p;
             bool bFound = false;
 
             // We have an AnnexB NALU, find the next 0x00000001 and count bytes
-//            while ((size_t)(p - packet_start + 4) < PES_packet_data_length && !bFound) {
             while ((size_t)(p - packet_start) < (PES_packet_data_length - 4) && !bFound)
             {
-                four_bytes = read_4_bytes(p);
+                three_bytes = read_3_bytes(p);
 
-                if (0x00000001 == four_bytes)
-                    bFound = true;
+                // B.2 Point 3
+                if (0x000000 == three_bytes ||
+                    0x000001 == three_bytes)
+                        bFound = true;
                 else
                     increment_ptr(p, 1);
             }
@@ -61,8 +70,9 @@ size_t avc_parser::process_video_frames(uint8_t *p, size_t PES_packet_data_lengt
 
             p = p_nalu_start; // reset p to start of nalu
         }
-        else
-            NumBytesInNALunit = four_bytes;
+        // Is this else necessary/legal?
+        //else
+        //    NumBytesInNALunit = four_bytes;
 
         if (0 == NumBytesInNALunit)
             continue;
@@ -88,8 +98,6 @@ size_t avc_parser::process_video_frames(uint8_t *p, size_t PES_packet_data_lengt
             p += 3;
         }
 
-        //while(p - p_nalu_data_start < NumBytesInNALunit)
-        //{
         if ((p+2 - p_nalu_data_start) < NumBytesInNALunit)
         {
             uint32_t emulation_prevention_three_byte = (*p << 16) | (*(p+1) << 8) | *(p+2);
@@ -134,7 +142,6 @@ size_t avc_parser::process_video_frames(uint8_t *p, size_t PES_packet_data_lengt
                 bDone = true;
                 break;
         }
-        //}
 
         p = p_nalu_data_start + NumBytesInNALunit;
     }
