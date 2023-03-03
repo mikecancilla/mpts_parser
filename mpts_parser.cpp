@@ -1298,6 +1298,18 @@ size_t mpts_parser::process_PES_packet_header(uint8_t *&p, size_t PES_packet_dat
 // Push data into video buffer for later processing by a decoder
 size_t mpts_parser::process_PES_packet(uint8_t *&packet_start, uint8_t *&p, mpts_e_stream_type stream_type, bool payload_unit_start)
 {
+#if 1
+    size_t PES_packet_data_length = m_packet_size - (p - packet_start);
+
+    if (m_b_analyze_elementary_stream)
+        push_video_data(p, PES_packet_data_length);
+
+    inc_ptr(p, PES_packet_data_length);
+    return PES_packet_data_length;
+#else
+    ////
+    // For fuller parsing enable this block, even though at this point it does not do much
+    ////
     if(false == payload_unit_start)
     {
         size_t PES_packet_data_length = m_packet_size - (p - packet_start);
@@ -1326,6 +1338,10 @@ size_t mpts_parser::process_PES_packet(uint8_t *&packet_start, uint8_t *&p, mpts
     if(0 == PES_packet_length)
         PES_packet_length = m_packet_size - (p - packet_start);
 
+    // PES_packet_length is not needed in this version of the code
+    // We want to limit our data copies to just the 192 or 188 packet length
+    size_t PES_packet_data_length = m_packet_size - (p - packet_start);
+
     if (stream_id != program_stream_map &&
         stream_id != padding_stream &&
         stream_id != private_stream_2 &&
@@ -1340,10 +1356,10 @@ size_t mpts_parser::process_PES_packet(uint8_t *&packet_start, uint8_t *&p, mpts
         //{
             // Push first PES packet, lots of info here.
             if(m_b_analyze_elementary_stream)
-                push_video_data(p, PES_packet_length);
+                push_video_data(p, PES_packet_data_length);
 
-            inc_ptr(p, PES_packet_length);
-        //}
+            inc_ptr(p, PES_packet_data_length);
+            //}
         //else
         //{
         //    inc_ptr(p, PES_packet_length);
@@ -1358,15 +1374,16 @@ size_t mpts_parser::process_PES_packet(uint8_t *&packet_start, uint8_t *&p, mpts
              stream_id == itu_h222_e_stream)
     {
         // PES_packet_data here
-        inc_ptr(p, PES_packet_length);
+        inc_ptr(p, PES_packet_data_length);
     }
     else if (stream_id == padding_stream)
     {
         // Padding bytes here
-        inc_ptr(p, PES_packet_length);
+        inc_ptr(p, PES_packet_data_length);
     }
 
-    return PES_packet_length;
+    return PES_packet_data_length;
+#endif
 }
 
 void mpts_parser::print_frame_info(mpts_frame *p_frame)
@@ -1862,6 +1879,7 @@ RETRY:
             {
                 bytes_processed += process_PES_packet_header(p, PES_packet_data_length);
 
+                /* Not sure this search for the start code is needed, removing for now
                 // Sometimes we come out of process_PES_packet_header and we are not at 0x00000001, I don't know why...
                 // So, for now, if we are not at 0x00000001, lets find it.
 
@@ -1869,6 +1887,7 @@ RETRY:
 
                 if(0x00000001 != four_bytes)
                     bytes_processed += next_nalu_start_code(p);
+                */
             }
 
 //            continue;

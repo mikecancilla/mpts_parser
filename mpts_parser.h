@@ -105,7 +105,7 @@ enum mpts_e_stream_id
     padding_stream = 0xBE,
     private_stream_2 = 0xBF,
     // 110x xxxx = 0xCxxxx, 0xDxxxx = ISO/IEC 13818-3 or ISO/IEC 11172-3 or ISO/IEC 13818-7 or ISO/IEC 14496-3 audio stream number x xxxx
-    // 1110 xxxx = 0xExxxx = ITU-T Rec. H.262 | ISO/IEC 13818-2, ISO/IEC 11172-2, ISO/IEC 14496-2 or ITU-T Rec. H.264 | ISO/IEC 14496-10 video stream number xxxx
+    // 1110 xxxx = 0xExxxx = Rec. ITU-T H.262 | ISO/IEC 13818-2 (MPEG2), ISO/IEC 11172-2, ISO/IEC 14496-2, Rec. ITU-T H.264 | ISO/IEC 14496-10 or Rec. ITU-T H.265 | ISO/IEC 23008-2 video stream number 'xxxx'
     ECM_stream = 0xF0,
     EMM_stream = 0xF1,
     DSMCC_stream = 0xF2,                // ITU-T Rec. H.222.0 | ISO/IEC 13818-1 Annex A or ISO/IEC 13818-6_DSMCC_stream
