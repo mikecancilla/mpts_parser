@@ -31,40 +31,38 @@
 #include "mpts_parser.h"
 
 static bool g_b_debug = false;
-static bool g_b_progress = false;
 static bool g_b_xml = true;
-static bool g_b_terse = true;
-static bool g_b_analyze_elementary_stream = false;
-
-size_t g_file_position = 0;
 
 uint8_t g_test_packet[188] = { 0x47, 0x00, 0x31, 0x35, 0x57, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x46, 0xCD, 0x90, 0xE6, 0xF1, 0x0D, 0x1A, 0xB5, 0xA6, 0x36, 0xFA, 0x5E, 0x17, 0x23, 0x75, 0x8F, 0x6F, 0x8F, 0x34, 0x68, 0xD6, 0xA8, 0xDB, 0xEA, 0x34, 0x3A, 0xB0, 0x39, 0xBE, 0x5E, 0xD1, 0xA3, 0x51, 0xAB, 0x1B, 0x7B, 0xFA, 0x53, 0x55, 0x16, 0xA3, 0x78, 0x56, 0x8D, 0x7A, 0xCA, 0x36, 0xF5, 0x84, 0xC4, 0x6E, 0x92, 0x5D, 0x6F, 0x02, 0xD1, 0xB4, 0xAD, 0x11, 0xB7, 0xD7, 0x61, 0x6D, 0xCA, 0xD0, 0xE8, 0xDF, 0x37, 0x68, 0xD9, 0x6B, 0x54, 0x6D, 0xEA, 0x9A, 0x96, 0xF3, 0x6D, 0x1B, 0x6A, 0xD1, 0x1B, 0x7A, 0x2A, 0xCE, 0xDE, 0x69, 0xA3, 0x55, 0x62, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
-static void inline my_printf(const char *format, ...)
+static void inline myPrintf(const char *format, ...)
 {
     if(g_b_debug)
     {
-        va_list arg_list;
-        va_start(arg_list, format);
-        vprintf(format, arg_list);
+        va_list argList;
+        va_start(argList, format);
+        vprintf(format, argList);
     }
 }
 
-static void inline printf_xml(unsigned int indent_level, const char *format, ...)
+static void inline printfXml(unsigned int indentLevel, const char *format, ...)
 {
     if(g_b_xml && format)
     {
-        char output_buffer[512] = "";
+        char outputBuffer[512] = "";
 
-        for(unsigned int i = 0; i < indent_level; i++)
-            strcat_s(output_buffer, sizeof(output_buffer), "  ");
+        for(unsigned int i = 0; i < indentLevel; i++)
+            strcat_s(outputBuffer, sizeof(outputBuffer), "  ");
 
-        va_list arg_list;
-        va_start(arg_list, format);
-        vsprintf_s(output_buffer + (indent_level*2), sizeof(output_buffer) - (indent_level*2), format, arg_list);
-        va_end(arg_list);
+        va_list argList;
+        va_start(argList, format);
+        vsprintf_s(outputBuffer + ((size_t)indentLevel*2),
+                   sizeof(outputBuffer) - ((size_t)indentLevel*2),
+                   format,
+                   argList);
+        va_end(argList);
 
-        printf(output_buffer);
+        printf(outputBuffer);
     }
 }
 
@@ -72,6 +70,11 @@ static void inline printf_xml(unsigned int indent_level, const char *format, ...
 int main(int argc, char* argv[])
 {
 //    tinyxml2::XMLDocument* doc = new tinyxml2::XMLDocument();
+
+    bool bProgress = false;
+    bool bTerse = true;
+    bool bAnalyzeElementaryStream = false;
+    size_t filePosition = 0;
 
     if (1 == argc)
     {
@@ -90,50 +93,50 @@ int main(int argc, char* argv[])
             g_b_debug = true;
 
         if (0 == strcmp("-p", argv[i]))
-            g_b_progress = true;
+            bProgress = true;
 
         if(0 == strcmp("-q", argv[i]))
             g_b_xml = false;
 
         if(0 == strcmp("-v", argv[i]))
-            g_b_terse = false;
+            bTerse = false;
 
         if(0 == strcmp("-e", argv[i]))
-            g_b_analyze_elementary_stream = true;
+            bAnalyzeElementaryStream = true;
     }
 
-    mpts_parser mpts(g_file_position);
+    mpts_parser mpts(filePosition);
     mpts.set_print_xml(g_b_xml);
-    mpts.set_terse(g_b_terse);
-    mpts.set_analyze_elementary_stream(g_b_analyze_elementary_stream);
+    mpts.set_terse(bTerse);
+    mpts.set_analyze_elementary_stream(bAnalyzeElementaryStream);
 
-    uint8_t *packet_buffer, *packet;
-	uint16_t program_map_pid = 0;
-    unsigned int packet_num = 0;
+    uint8_t *packetBuffer, *packet;
+	uint16_t programMapPid = 0;
+    unsigned int packetNum = 0;
 
-	size_t packet_buffer_size = 0;
-    int64_t total_read = 0;
-    int64_t read_block_size = 0;
+	size_t packetBufferSize = 0;
+    int64_t totalRead = 0;
+    int64_t readBlockSize = 0;
 
-	FILE *f = nullptr;
-	fopen_s(&f, argv[argc - 1], "rb");
+	FILE *inputFile = nullptr;
+	fopen_s(&inputFile, argv[argc - 1], "rb");
 
-	if (nullptr == f)
+	if (nullptr == inputFile)
     {
         fprintf(stderr, "%s: Can't open input file", argv[0]);
 		return -1;
     }
 
     // Determine the size of the file
-    int64_t file_size = 0;
+    int64_t fileSize = 0;
 
 #ifdef WINDOWS
-    struct __stat64 stat64_buf;
-    _stat64(argv[argc - 1], &stat64_buf);
-    file_size = stat64_buf.st_size;
+    struct __stat64 stat64Buf;
+    _stat64(argv[argc - 1], &stat64Buf);
+    fileSize = stat64Buf.st_size;
 #else
     fseek(f, 0L, SEEK_END);
-    file_size = ftell(f);
+    fileSize = ftell(f);
     fseek(f, 0L, SEEK_SET);
 #endif
 
@@ -142,94 +145,94 @@ int main(int argc, char* argv[])
     // before the 188 byte packet, making the packet size 192.
     // https://en.wikipedia.org/wiki/MPEG_transport_stream
 
-    uint8_t temp_buffer[5];
-    fread(temp_buffer, 1, 5, f);
+    uint8_t tempBuffer[5];
+    fread(tempBuffer, 1, 5, inputFile);
 
-    int packet_size = mpts.determine_packet_size(temp_buffer);
+    int packetSize = mpts.determine_packet_size(tempBuffer);
 
-    if(-1 == packet_size)
+    if(-1 == packetSize)
     {
         fprintf(stderr, "%s: Can't recognize the input file", argv[0]);
         return -1;
     }
 
     // Go back to the beginning of the file
-    fseek(f, 0L, SEEK_SET);
+    fseek(inputFile, 0L, SEEK_SET);
 
-    if(file_size > 10000*packet_size)
-        read_block_size = 10000*packet_size;
+    if(fileSize > 10000*(int64_t)packetSize)
+        readBlockSize = 10000*(int64_t)packetSize;
     else
-        read_block_size = file_size;
+        readBlockSize = fileSize;
 
-    packet_buffer = new uint8_t[read_block_size];
+    packetBuffer = new uint8_t[readBlockSize];
 
     // Read each 188 byte packet and process the packet
-	packet_buffer_size = fread(packet_buffer, 1, read_block_size, f);
-    packet = packet_buffer;
+	packetBufferSize = fread(packetBuffer, 1, readBlockSize, inputFile);
+    packet = packetBuffer;
 
-    printf_xml(0, "<?xml version = \"1.0\" encoding = \"UTF-8\"?>\n");
-    printf_xml(0, "<file>\n");
-    printf_xml(1, "<name>%s</name>\n", argv[argc - 1]);
-    printf_xml(1, "<file_size>%llu</file_size>\n", file_size);
-    printf_xml(1, "<packet_size>%d</packet_size>\n", packet_size);
-    if(g_b_terse)
-        printf_xml(1, "<terse>1</terse>\n");
+    printfXml(0, "<?xml version = \"1.0\" encoding = \"UTF-8\"?>\n");
+    printfXml(0, "<file>\n");
+    printfXml(1, "<name>%s</name>\n", argv[argc - 1]);
+    printfXml(1, "<fileSize>%llu</fileSize>\n", fileSize);
+    printfXml(1, "<packetSize>%d</packetSize>\n", packetSize);
+    if(bTerse)
+        printfXml(1, "<terse>1</terse>\n");
     else
-        printf_xml(1, "<terse>0</terse>\n");
+        printfXml(1, "<terse>0</terse>\n");
 
     float step = 1.f;
     float nextStep = 0.f;
     float progress = 0.f;
 
     // Send one packet at a time into the mpts_parser
-	while((size_t) (packet - packet_buffer) < packet_buffer_size)
+	while((size_t) (packet - packetBuffer) < packetBufferSize)
 	{
         int err = 0;
 
-//        if(packet_num == 88892)
+//        if(packetNum == 88892)
 //            __debugbreak();
 
-        if(192 == packet_size)
-            err = mpts.process_packet(packet + 4, packet_num);
+        if(192 == packetSize)
+            err = mpts.process_packet(packet + 4, packetNum);
         else
-            err = mpts.process_packet(packet, packet_num);
+            err = mpts.process_packet(packet, packetNum);
 
         if(0 != err)
             goto error;
 
-        total_read += packet_size;
-        g_file_position = total_read;
+        totalRead += packetSize;
+        filePosition = totalRead;
 
-        if(g_b_progress)
+        if(bProgress)
         {
             if(progress >= nextStep)
             {
-                fprintf(stderr, "Total bytes processed: %llu, %2.2f%%\r", total_read, progress);
+                fprintf(stderr, "Total bytes processed: %llu, %2.2f%%\r", totalRead, progress);
                 nextStep += step;
             }
 
-            progress = ((float)total_read / (float)file_size) * 100.f;
+            progress = ((float)totalRead / (float)fileSize) * 100.f;
         }
 
-        if(0 == (total_read % read_block_size))
+        if(0 == (totalRead % readBlockSize))
         {
-            packet_buffer_size = fread(packet_buffer, 1, read_block_size, f);
-            packet = packet_buffer;
+            packetBufferSize = fread(packetBuffer, 1, readBlockSize, inputFile);
+            packet = packetBuffer;
         }
         else
-            packet += packet_size;
+            packet += packetSize;
 
-        packet_num++;
+        packetNum++;
     }
 
     mpts.flush();
 
 error:
-    printf_xml(0, "</file>\n");
+    printfXml(0, "</file>\n");
 
-    delete packet_buffer;
+    delete [] packetBuffer;
 
-	fclose(f);
+	fclose(inputFile);
 
 	return 0;
 }
