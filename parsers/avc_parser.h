@@ -75,7 +75,7 @@ enum eAVCLevel {
 class avcParser : public baseParser
 {
 public:
-    // Process frames_wanted frames at a time
+    // Process framesWanted frames at a time
     virtual size_t processVideoFrames(uint8_t *p, size_t PES_packet_data_length, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut = false) override;
 
 private:
