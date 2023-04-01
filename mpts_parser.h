@@ -297,5 +297,5 @@ private:
     mpts_frame m_video_frame;
     mpts_frame m_audio_frame;
 
-    std::shared_ptr<base_parser> m_parser;
+    std::shared_ptr<baseParser> m_parser;
 };

@@ -72,22 +72,22 @@ enum eAVCLevel {
   eAVCLevel5_2  = 51
 };
 
-class avc_parser : public base_parser
+class avcParser : public baseParser
 {
 public:
     // Process frames_wanted frames at a time
-    virtual size_t process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out = false) override;
+    virtual size_t processVideoFrames(uint8_t *p, size_t PES_packet_data_length, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut = false) override;
 
 private:
     // Entire available stream in memory
-    size_t process_sequence_parameter_set(uint8_t *&p);
-    size_t process_vui_parameters(BitStream &bs);
-    size_t process_picture_parameter_set(uint8_t *&p);
-    size_t process_slice_layer_without_partitioning(uint8_t *&p);
-    size_t process_slice_header(uint8_t *&p);
-    size_t process_access_unit_delimiter(uint8_t *&p);
-    size_t process_sei_message(uint8_t *&p, uint8_t *pLastByte);
-    size_t process_recovery_point_sei(uint8_t *&p);
+    size_t processSequenceParameterSet(uint8_t *&p);
+    size_t processVuiParameters(BitStream &bs);
+    size_t processPictureParameterSet(uint8_t *&p);
+    size_t processSliceLayerWithoutPartitioning(uint8_t *&p);
+    size_t processSliceHeader(uint8_t *&p);
+    size_t processAccessUnitDelimiter(uint8_t *&p);
+    size_t processSeiMessage(uint8_t *&p, uint8_t *pLastByte);
+    size_t processRecoveryPointSei(uint8_t *&p);
 
     uint8_t EGParse(BitStream &bs, uint32_t &bitsRead);
 };

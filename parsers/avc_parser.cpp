@@ -3,72 +3,72 @@
 #include "utils.h"
 #include "bit_stream.h"
 
-static void printf_xml(unsigned int indent_level, const char *format, ...)
+static void printfXml(unsigned int indentLevel, const char *format, ...)
 {
     if(format)
     {
-        char output_buffer[512] = "";
+        char outputBuffer[512] = "";
 
-        for(unsigned int i = 0; i < indent_level; i++)
-            strcat_s(output_buffer, sizeof(output_buffer), "  ");
+        for(unsigned int i = 0; i < indentLevel; i++)
+            strcat_s(outputBuffer, sizeof(outputBuffer), "  ");
 
-        va_list arg_list;
-        va_start(arg_list, format);
-        vsprintf_s(output_buffer + (indent_level*2), sizeof(output_buffer) - (indent_level*2), format, arg_list);
-        va_end(arg_list);
+        va_list argList;
+        va_start(argList, format);
+        vsprintf_s(outputBuffer + (indentLevel*2), sizeof(outputBuffer) - (indentLevel*2), format, argList);
+        va_end(argList);
 
-        printf(output_buffer);
+        printf(outputBuffer);
     }
 }
 
-size_t avc_parser::process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out)
+size_t avcParser::processVideoFrames(uint8_t *p, size_t PES_packet_data_length, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut)
 {
-    m_b_xml_out = b_xml_out;
+    m_bXmlOut = bXmlOut;
 
-    uint8_t *packet_start = p;
-    size_t bytes_processed = 0;
+    uint8_t *packetStart = p;
+    size_t bytesProcessed = 0;
     bool bDone = false;
-    frames_received = 0;
+    framesReceived = 0;
 
-    while((size_t) (p - packet_start) < PES_packet_data_length && !bDone)
+    while((size_t) (p - packetStart) < PES_packet_data_length && !bDone)
     {
         // See section: B.2 Byte stream NAL unit decoding process
         // Eat leading_zero_8bits and trailing_zero_8bits with this loop
-        uint32_t three_bytes = read_3_bytes(p);
-        while (0x000001 != three_bytes)
+        uint32_t threeBytes = read_3_bytes(p);
+        while (0x000001 != threeBytes)
         {
             increment_ptr(p, 1);
-            three_bytes = read_3_bytes(p);
+            threeBytes = read_3_bytes(p);
         }
 
         increment_ptr(p, 3);
 
         int64_t NumBytesInNALunit = 0;
-        if (0x000001 == three_bytes)
+        if (0x000001 == threeBytes)
         {
-            uint8_t *p_nalu_start = p;
+            uint8_t *pNaluStart = p;
             bool bFound = false;
 
             // We have an AnnexB NALU, find the next 0x00000001 and count bytes
-            while ((size_t)(p - packet_start) < (PES_packet_data_length - 4) && !bFound)
+            while ((size_t)(p - packetStart) < (PES_packet_data_length - 4) && !bFound)
             {
-                three_bytes = read_3_bytes(p);
+                threeBytes = read_3_bytes(p);
 
                 // B.2 Point 3
-                if (0x000000 == three_bytes ||
-                    0x000001 == three_bytes)
+                if (0x000000 == threeBytes ||
+                    0x000001 == threeBytes)
                         bFound = true;
                 else
                     increment_ptr(p, 1);
             }
 
-            NumBytesInNALunit = p - p_nalu_start;
+            NumBytesInNALunit = p - pNaluStart;
             
             // If we did not find a NALU start code, then all the rest of the data belongs to this frame
             if (!bFound)
                 NumBytesInNALunit += 4; // Take into consideration the 4 bytes we don't eat
 
-            p = p_nalu_start; // reset p to start of nalu
+            p = pNaluStart; // reset p to start of nalu
         }
         // Is this else necessary/legal?
         //else
@@ -79,7 +79,7 @@ size_t avc_parser::process_video_frames(uint8_t *p, size_t PES_packet_data_lengt
 
         // H.264 spec, 7.3.1 NAL unit syntax
 
-        uint8_t *p_nalu_data_start = p;
+        uint8_t *pNaluDataStart = p;
 
         uint8_t byte = *p;
         increment_ptr(p, 1);
@@ -98,7 +98,7 @@ size_t avc_parser::process_video_frames(uint8_t *p, size_t PES_packet_data_lengt
             p += 3;
         }
 
-        if ((p+2 - p_nalu_data_start) < NumBytesInNALunit)
+        if ((p+2 - pNaluDataStart) < NumBytesInNALunit)
         {
             uint32_t emulation_prevention_three_byte = (*p << 16) | (*(p+1) << 8) | *(p+2);
 
@@ -112,46 +112,46 @@ size_t avc_parser::process_video_frames(uint8_t *p, size_t PES_packet_data_lengt
         switch (nal_unit_type)
         {
             case eAVCNaluType_AccessUnitDelimiter:
-                process_access_unit_delimiter(p);
+                processAccessUnitDelimiter(p);
                 //p += NumBytesInNALunit - (p - p_nalu_data_start);
                 break;
 
             case eAVCNaluType_SequenceParameterSet:
-                process_sequence_parameter_set(p);
+                processSequenceParameterSet(p);
                 //p += NumBytesInNALunit - (p - p_nalu_data_start);
                 break;
 
             case eAVCNaluType_PictureParameterSet:
-                process_picture_parameter_set(p);
+                processPictureParameterSet(p);
                 //p += NumBytesInNALunit - (p - p_nalu_data_start);
                 break;
 
             case eAVCNaluType_SupplementalEnhancementInformation:
-                process_sei_message(p, p_nalu_data_start + NumBytesInNALunit);
+                processSeiMessage(p, pNaluDataStart + NumBytesInNALunit);
                 //p += NumBytesInNALunit - (p - p_nalu_data_start);
                 break;
 
             case eAVCNaluType_CodedSliceIdrPicture:
-                printf_xml(2, "<closed_gop>%d</closed_gop>\n", 1);
+                printfXml(2, "<closed_gop>%d</closed_gop>\n", 1);
 
             case eAVCNaluType_CodedSliceAuxiliaryPicture:
             case eAVCNaluType_CodedSliceNonIdrPicture:
-                process_slice_layer_without_partitioning(p);
+                processSliceLayerWithoutPartitioning(p);
                 //p += NumBytesInNALunit - (p - p_nalu_data_start);
-                frames_received++;
+                framesReceived++;
                 bDone = true;
                 break;
         }
 
-        p = p_nalu_data_start + NumBytesInNALunit;
+        p = pNaluDataStart + NumBytesInNALunit;
     }
 
-    return p - packet_start;
+    return p - packetStart;
 }
 
 // 7.3.2.3.1 Supplemental enhancement information message syntax
 // Annex D - SEI Messages
-size_t avc_parser::process_sei_message(uint8_t*& p, uint8_t* pLastByte)
+size_t avcParser::processSeiMessage(uint8_t*& p, uint8_t* pLastByte)
 {
     uint8_t *pStart = p;
 
@@ -185,7 +185,7 @@ size_t avc_parser::process_sei_message(uint8_t*& p, uint8_t* pLastByte)
         payloadSize += last_payload_size_byte;
 
         if (6 == payloadType)
-            process_recovery_point_sei(p);
+            processRecoveryPointSei(p);
         else
             p += payloadSize;
 
@@ -195,7 +195,7 @@ size_t avc_parser::process_sei_message(uint8_t*& p, uint8_t* pLastByte)
     return p - pStart;
 }
 
-size_t avc_parser::process_recovery_point_sei(uint8_t*& p)
+size_t avcParser::processRecoveryPointSei(uint8_t*& p)
 {
     uint8_t* pStart = p;
 
@@ -209,11 +209,11 @@ size_t avc_parser::process_recovery_point_sei(uint8_t*& p)
     return p - pStart;
 }
 
-size_t avc_parser::process_slice_layer_without_partitioning(uint8_t*& p)
+size_t avcParser::processSliceLayerWithoutPartitioning(uint8_t*& p)
 {
     uint8_t* pStart = p;
 
-    process_slice_header(p);
+    processSliceHeader(p);
 
     // process_slice_data()
     // rbsp_slice_trailing_bits()
@@ -222,7 +222,7 @@ size_t avc_parser::process_slice_layer_without_partitioning(uint8_t*& p)
 }
 
 // 7.4.3
-size_t avc_parser::process_slice_header(uint8_t*& p)
+size_t avcParser::processSliceHeader(uint8_t*& p)
 {
     uint8_t *pStart = p;
 
@@ -247,12 +247,12 @@ size_t avc_parser::process_slice_header(uint8_t*& p)
     9               SI (SI slice)
     */
 
-    printf_xml(2, "<type>%c</type>\n", "PBIPIPBIPI"[slice_type]);
+    printfXml(2, "<type>%c</type>\n", "PBIPIPBIPI"[slice_type]);
 
     return p - pStart;
 }
 
-size_t avc_parser::process_picture_parameter_set(uint8_t *&p)
+size_t avcParser::processPictureParameterSet(uint8_t *&p)
 {
     uint8_t *pStart = p;
     return p - pStart;
@@ -260,7 +260,7 @@ size_t avc_parser::process_picture_parameter_set(uint8_t *&p)
 
 // 7.3.2.1.1 - Table
 // 7.4.2.1.1 Sequence parameter set data semantics
-size_t avc_parser::process_sequence_parameter_set(uint8_t *&p)
+size_t avcParser::processSequenceParameterSet(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
@@ -348,17 +348,17 @@ size_t avc_parser::process_sequence_parameter_set(uint8_t *&p)
     uint8_t vui_parameters_present_flag = bs.GetBits(1);
 
     if (vui_parameters_present_flag)
-        process_vui_parameters(bs);
+        processVuiParameters(bs);
 
     return bs.m_p - pStart;
 }
 
-size_t avc_parser::process_vui_parameters(BitStream& bs)
+size_t avcParser::processVuiParameters(BitStream& bs)
 {
     return 0;
 }
 
-size_t avc_parser::process_access_unit_delimiter(uint8_t*& p)
+size_t avcParser::processAccessUnitDelimiter(uint8_t*& p)
 {
     uint8_t* pStart = p;
 
@@ -369,7 +369,7 @@ size_t avc_parser::process_access_unit_delimiter(uint8_t*& p)
 }
 
 // Exp-Golomb Parse, Clause 9.1
-uint8_t avc_parser::EGParse(BitStream &bs, uint32_t &bitsRead)
+uint8_t avcParser::EGParse(BitStream &bs, uint32_t &bitsRead)
 {
     (void)bitsRead;
     uint8_t codeNum = 0;

@@ -125,7 +125,7 @@ enum e_mpeg2_frame_rate_value
     // 0xFF, reserved
 };
 
-class mpeg2_parser : public base_parser
+class mpeg2_parser : public baseParser
 {
 public:
 
@@ -134,7 +134,7 @@ public:
     {}
 
     // Process frames_wanted frames at a time
-    virtual size_t process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out = false) override;
+    virtual size_t processVideoFrames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out = false) override;
 
 private:
     // Entire available stream in memory

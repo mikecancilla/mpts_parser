@@ -51,9 +51,9 @@ static void inline inc_ptr(uint8_t *&p, size_t bytes)
     increment_ptr(p, bytes);
 }
 
-size_t mpeg2_parser::process_video_frames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out)
+size_t mpeg2_parser::processVideoFrames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out)
 {
-    m_b_xml_out = b_xml_out;
+    m_bXmlOut = b_xml_out;
 
     uint8_t *pStart = p;
     size_t bytes_processed = 0;
@@ -152,7 +152,7 @@ size_t mpeg2_parser::process_video_PES(uint8_t *p, size_t PES_packet_data_length
 
     while(bytes_processed < PES_packet_data_length && !bDone)
     {
-        bytes_processed += process_video_frames(p, PES_packet_data_length, 1, frames_received);
+        bytes_processed += processVideoFrames(p, PES_packet_data_length, 1, frames_received);
     }
 
     return p - pStart;

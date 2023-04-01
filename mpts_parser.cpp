@@ -1519,7 +1519,7 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&packet_start, uint8_t *
             {
                 case eMPEG2_Video:
                     if(nullptr == m_parser)
-                        m_parser = std::shared_ptr<base_parser>(new mpeg2_parser());
+                        m_parser = std::shared_ptr<baseParser>(new mpeg2_parser());
 
                     p_frame = &m_video_frame;
                     p_frame->pid = pid;
@@ -1527,7 +1527,7 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&packet_start, uint8_t *
                 break;
                 case eH264_Video:
                     if(nullptr == m_parser)
-                        m_parser = std::shared_ptr<base_parser>(new avc_parser());
+                        m_parser = std::shared_ptr<baseParser>(new avcParser());
 
                     p_frame = &m_video_frame;
                     p_frame->pid = pid;
@@ -1896,7 +1896,7 @@ RETRY:
         //switch(streamType)
         //{
         //    case eMPEG2_Video:
-                bytes_processed += m_parser->process_video_frames(p, PES_packet_data_length - bytes_processed, frames_wanted, frames_received, b_xml_out);
+                bytes_processed += m_parser->processVideoFrames(p, PES_packet_data_length - bytes_processed, frames_wanted, frames_received, b_xml_out);
         //    break;
         //}
 
