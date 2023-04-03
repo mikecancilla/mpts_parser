@@ -1519,7 +1519,7 @@ int16_t mpts_parser::process_pid(uint16_t pid, uint8_t *&packet_start, uint8_t *
             {
                 case eMPEG2_Video:
                     if(nullptr == m_parser)
-                        m_parser = std::shared_ptr<baseParser>(new mpeg2_parser());
+                        m_parser = std::shared_ptr<baseParser>(new mpeg2Parser());
 
                     p_frame = &m_video_frame;
                     p_frame->pid = pid;

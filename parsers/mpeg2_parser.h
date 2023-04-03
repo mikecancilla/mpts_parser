@@ -58,7 +58,7 @@
     0xFA - 0xFE	reserved
     0xFF	    Program Stream Directory
 */
-enum e_mpeg2_start_code
+enum eMpeg2StartCode
 {
     picture_start_code = 0,
     slice_start_codes_begin = 1,
@@ -78,7 +78,7 @@ enum e_mpeg2_start_code
 
     Reserved: 0, 4, 6, 11, 12, 13, 14, 15
 */
-enum e_mpeg2_extension_start_code_identifier
+enum eMpeg2ExtensionStartCodeIdentifier
 {
     sequence_extension_id = 1,
     sequence_display_extension_id = 2,
@@ -97,7 +97,7 @@ enum e_mpeg2_extension_start_code_identifier
     They all follow after the standard extension_start_code of 0x000001B5.
     The TYPE of data that follows the extension_strt_code is context dependent.
 */
-enum e_mpeg2_extension_type
+enum eMpeg2ExtensionType
 {
     sequence_extension = 0,
     picture_coding_extension,
@@ -110,7 +110,7 @@ enum e_mpeg2_extension_type
 /*
     Table 6-4 --- frame_rate_value
 */
-enum e_mpeg2_frame_rate_value
+enum eMpeg2FrameRateValue
 {
     frame_rate_forbidden = 0,   // forbidden
     frame_rate_23976 = 1,       // 24 000÷1001 (23,976)
@@ -125,31 +125,31 @@ enum e_mpeg2_frame_rate_value
     // 0xFF, reserved
 };
 
-class mpeg2_parser : public baseParser
+class mpeg2Parser : public baseParser
 {
 public:
 
-    mpeg2_parser()
-        : m_next_mpeg2_extension_type(sequence_extension)
+    mpeg2Parser()
+        : m_nextMpeg2ExtensionType(sequence_extension)
     {}
 
-    // Process frames_wanted frames at a time
-    virtual size_t processVideoFrames(uint8_t *p, size_t PES_packet_data_length, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out = false) override;
+    // Process framesWanted frames at a time
+    virtual size_t processVideoFrames(uint8_t *p, size_t PESPacketDataLength, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut = false) override;
 
 private:
     // Entire available stream in memory
-    size_t process_video_PES(uint8_t *p, size_t PES_packet_data_length);
-    size_t process_sequence_header(uint8_t *&p);
-    size_t process_sequence_extension(uint8_t *&p);
-    size_t process_sequence_display_extension(uint8_t *&p);
-    size_t process_sequence_scalable_extension(uint8_t *&p);
-    size_t process_extension_and_user_data_0(uint8_t *&p);
-    size_t process_extension(uint8_t *&p);
-    size_t process_group_of_pictures_header(uint8_t *&p);
-    size_t process_picture_header(uint8_t *&p);
-    size_t process_picture_coding_extension(uint8_t *&p);
-    size_t process_user_data(uint8_t *&p);
-    size_t process_slice(uint8_t *&p);
+    size_t processVideoPES(uint8_t *p, size_t PESPacketDataLength);
+    size_t processSequenceHeader(uint8_t *&p);
+    size_t processSequenceExtension(uint8_t *&p);
+    size_t processSequenceDisplayExtension(uint8_t *&p);
+    size_t processSequenceScalableExtension(uint8_t *&p);
+    size_t processExtensionAndUserData0(uint8_t *&p);
+    size_t processExtension(uint8_t *&p);
+    size_t processGroupOfPicturesHeader(uint8_t *&p);
+    size_t processPictureHeader(uint8_t *&p);
+    size_t processPictureCodingExtension(uint8_t *&p);
+    size_t processUserData(uint8_t *&p);
+    size_t processSlice(uint8_t *&p);
 
-    e_mpeg2_extension_type m_next_mpeg2_extension_type;
+    eMpeg2ExtensionType m_nextMpeg2ExtensionType;
 };
