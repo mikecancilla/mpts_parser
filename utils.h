@@ -30,7 +30,7 @@
 #include <cstdarg>
 #include <cassert>
 
-inline uint16_t read_2_bytes(uint8_t *p)
+inline uint16_t read2Bytes(uint8_t *p)
 {
     uint16_t ret = *p++;
     ret <<= 8;
@@ -39,7 +39,7 @@ inline uint16_t read_2_bytes(uint8_t *p)
     return ret;
 }
 
-inline uint32_t read_3_bytes(uint8_t* p)
+inline uint32_t read3Bytes(uint8_t* p)
 {
     uint32_t ret = 0;
     uint32_t val = *p++;
@@ -51,7 +51,7 @@ inline uint32_t read_3_bytes(uint8_t* p)
     return ret;
 }
 
-inline uint32_t read_4_bytes(uint8_t *p)
+inline uint32_t read4Bytes(uint8_t *p)
 {
     uint32_t ret = 0;
     uint32_t val = *p++;
@@ -65,14 +65,14 @@ inline uint32_t read_4_bytes(uint8_t *p)
     return ret;
 }
 
-inline size_t increment_ptr(uint8_t *&p, size_t bytes)
+inline size_t incrementPtr(uint8_t *&p, size_t bytes)
 {
     p += bytes;
     return bytes;
 }
 
 // Search for 0x00 00 01
-size_t inline next_start_code(uint8_t *&p, size_t data_length = -1)
+size_t inline nextStartCode(uint8_t *&p, size_t dataLength = -1)
 {
     size_t count = 0;
     uint8_t *pStart = p;
@@ -80,9 +80,9 @@ size_t inline next_start_code(uint8_t *&p, size_t data_length = -1)
     while(    *p != 0 ||
           *(p+1) != 0 ||
           *(p+2) != 1 &&
-          count < data_length)
+          count < dataLength)
     {
-        increment_ptr(p, 1);
+        incrementPtr(p, 1);
         count++;
     }
 
@@ -93,7 +93,7 @@ size_t inline next_start_code(uint8_t *&p, size_t data_length = -1)
 }
 
 // Search for 0x00 00 00 01
-size_t inline next_nalu_start_code(uint8_t *&p, size_t data_length = -1)
+size_t inline nextNaluStartCode(uint8_t *&p, size_t dataLength = -1)
 {
     size_t count = 0;
     uint8_t *pStart = p;
@@ -102,9 +102,9 @@ size_t inline next_nalu_start_code(uint8_t *&p, size_t data_length = -1)
           *(p+1) != 0 ||
           *(p+2) != 0 ||
           *(p+3) != 1 &&
-          count < data_length)
+          count < dataLength)
     {
-        increment_ptr(p, 1);
+        incrementPtr(p, 1);
         count++;
     }
 
@@ -114,28 +114,28 @@ size_t inline next_nalu_start_code(uint8_t *&p, size_t data_length = -1)
     return p - pStart;
 }
 
-inline size_t skip_to_next_start_code(uint8_t *&p)
+inline size_t skipToNextStartCode(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
-    uint32_t four_bytes = read_4_bytes(p);
-    increment_ptr(p, 4);
+    uint32_t fourBytes = read4Bytes(p);
+    incrementPtr(p, 4);
 
-    next_start_code(p);
+    nextStartCode(p);
 
     return p - pStart;
 }
 
-inline size_t validate_start_code(uint8_t *&p, uint32_t start_code)
+inline size_t validateStartCode(uint8_t *&p, uint32_t startCode)
 {
-    uint32_t four_bytes = read_4_bytes(p);
-    increment_ptr(p, 4);
+    uint32_t fourBytes = read4Bytes(p);
+    incrementPtr(p, 4);
 
-    uint32_t start_code_prefix = (four_bytes & 0xFFFFFF00) >> 8;
+    uint32_t start_code_prefix = (fourBytes & 0xFFFFFF00) >> 8;
     assert(0x000001 == start_code_prefix);
 
-    four_bytes &= 0x000000FF;
-    assert(four_bytes == start_code);
+    fourBytes &= 0x000000FF;
+    assert(fourBytes == startCode);
 
     return 4;
 }

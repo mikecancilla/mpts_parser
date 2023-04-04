@@ -21,7 +21,7 @@ static void printfXml(unsigned int indentLevel, const char *format, ...)
     }
 }
 
-size_t avcParser::processVideoFrames(uint8_t *p, size_t PES_packet_data_length, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut)
+size_t avcParser::processVideoFrames(uint8_t *p, size_t PESPacketDataLength, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut)
 {
     m_bXmlOut = bXmlOut;
 
@@ -30,18 +30,18 @@ size_t avcParser::processVideoFrames(uint8_t *p, size_t PES_packet_data_length, 
     bool bDone = false;
     framesReceived = 0;
 
-    while((size_t) (p - packetStart) < PES_packet_data_length && !bDone)
+    while((size_t) (p - packetStart) < PESPacketDataLength && !bDone)
     {
         // See section: B.2 Byte stream NAL unit decoding process
         // Eat leading_zero_8bits and trailing_zero_8bits with this loop
-        uint32_t threeBytes = read_3_bytes(p);
+        uint32_t threeBytes = read3Bytes(p);
         while (0x000001 != threeBytes)
         {
-            increment_ptr(p, 1);
-            threeBytes = read_3_bytes(p);
+            incrementPtr(p, 1);
+            threeBytes = read3Bytes(p);
         }
 
-        increment_ptr(p, 3);
+        incrementPtr(p, 3);
 
         int64_t NumBytesInNALunit = 0;
         if (0x000001 == threeBytes)
@@ -50,16 +50,16 @@ size_t avcParser::processVideoFrames(uint8_t *p, size_t PES_packet_data_length, 
             bool bFound = false;
 
             // We have an AnnexB NALU, find the next 0x00000001 and count bytes
-            while ((size_t)(p - packetStart) < (PES_packet_data_length - 4) && !bFound)
+            while ((size_t)(p - packetStart) < (PESPacketDataLength - 4) && !bFound)
             {
-                threeBytes = read_3_bytes(p);
+                threeBytes = read3Bytes(p);
 
                 // B.2 Point 3
                 if (0x000000 == threeBytes ||
                     0x000001 == threeBytes)
                         bFound = true;
                 else
-                    increment_ptr(p, 1);
+                    incrementPtr(p, 1);
             }
 
             NumBytesInNALunit = p - pNaluStart;
@@ -72,7 +72,7 @@ size_t avcParser::processVideoFrames(uint8_t *p, size_t PES_packet_data_length, 
         }
         // Is this else necessary/legal?
         //else
-        //    NumBytesInNALunit = four_bytes;
+        //    NumBytesInNALunit = fourBytes;
 
         if (0 == NumBytesInNALunit)
             continue;
@@ -82,7 +82,7 @@ size_t avcParser::processVideoFrames(uint8_t *p, size_t PES_packet_data_length, 
         uint8_t *pNaluDataStart = p;
 
         uint8_t byte = *p;
-        increment_ptr(p, 1);
+        incrementPtr(p, 1);
 
         assert(0 == (byte & 0x80)); // Forbidden zero bit
 
@@ -162,12 +162,12 @@ size_t avcParser::processSeiMessage(uint8_t*& p, uint8_t* pLastByte)
 
         while (*p == 0xFF)
         {
-            increment_ptr(p, 1);
+            incrementPtr(p, 1);
             payloadType += 255;
         }
 
         uint8_t last_payload_type_byte = *p;
-        increment_ptr(p, 1);
+        incrementPtr(p, 1);
 
         payloadType += last_payload_type_byte;
 
@@ -175,12 +175,12 @@ size_t avcParser::processSeiMessage(uint8_t*& p, uint8_t* pLastByte)
 
         while (*p == 0xFF)
         {
-            increment_ptr(p, 1);
+            incrementPtr(p, 1);
             payloadSize += 255;
         }
 
         uint8_t last_payload_size_byte = *p;
-        increment_ptr(p, 1);
+        incrementPtr(p, 1);
 
         payloadSize += last_payload_size_byte;
 
@@ -265,12 +265,12 @@ size_t avcParser::processSequenceParameterSet(uint8_t *&p)
     uint8_t *pStart = p;
 
     uint8_t byte = *p;
-    increment_ptr(p, 1);
+    incrementPtr(p, 1);
 
     uint8_t profile_idc = byte;
 
     byte = *p;
-    increment_ptr(p, 1);
+    incrementPtr(p, 1);
 
     uint8_t constraint_set0_flag = (byte & 0x80) >> 7;
     uint8_t constraint_set1_flag = (byte & 0x40) >> 6;
@@ -281,7 +281,7 @@ size_t avcParser::processSequenceParameterSet(uint8_t *&p)
     // reserved_zero_2_bits
 
     byte = *p;
-    increment_ptr(p, 1);
+    incrementPtr(p, 1);
 
     uint8_t level_idc = byte;
 
@@ -363,7 +363,7 @@ size_t avcParser::processAccessUnitDelimiter(uint8_t*& p)
     uint8_t* pStart = p;
 
     uint8_t primary_pic_type = (*p & 0xE0) >> 5;
-    increment_ptr(p, 1);
+    incrementPtr(p, 1);
 
     return p - pStart;
 }

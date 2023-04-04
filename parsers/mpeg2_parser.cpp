@@ -46,11 +46,6 @@ static void inline printfXml(unsigned int indentLevel, const char *format, ...)
     }
 }
 
-//static void inline incPtr(uint8_t *&p, size_t bytes)
-//{
-//    increment_ptr(p, bytes);
-//}
-
 size_t mpeg2Parser::processVideoFrames(uint8_t *p, size_t PESPacketDataLength, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut)
 {
     m_bXmlOut = bXmlOut;
@@ -63,13 +58,13 @@ size_t mpeg2Parser::processVideoFrames(uint8_t *p, size_t PESPacketDataLength, u
     while(bytesProcessed < PESPacketDataLength && !bDone)
     {
 RETRY:
-        uint32_t startCode = read_4_bytes(p);
+        uint32_t startCode = read4Bytes(p);
         uint32_t startCodePrefix = (startCode & 0xFFFFFF00) >> 8;
 
         if(0x000001 != startCodePrefix)
         {
             fprintf(stderr, "WARNING: Bad data found %llu bytes into this frame.  Searching for next start code...\n", bytesProcessed);
-            size_t count = next_start_code(p, PESPacketDataLength);
+            size_t count = nextStartCode(p, PESPacketDataLength);
 
             if(-1 == count)
             {
@@ -96,12 +91,12 @@ RETRY:
 
             case user_data_start_code:
                 //bytesProcessed += process_user_data(p);
-                bytesProcessed += skip_to_next_start_code(p);
+                bytesProcessed += skipToNextStartCode(p);
             break;
 
             case sequence_header_code:
                 //bytesProcessed += process_sequence_header(p);
-                bytesProcessed += skip_to_next_start_code(p);
+                bytesProcessed += skipToNextStartCode(p);
             break;
 
             case sequence_error_code:
@@ -110,7 +105,7 @@ RETRY:
 
             case extension_start_code:
                 //bytesProcessed += process_extension(p);
-                bytesProcessed += skip_to_next_start_code(p);
+                bytesProcessed += skipToNextStartCode(p);
             break;
 
             case sequence_end_code:
@@ -119,7 +114,7 @@ RETRY:
 
             case group_start_code:
                 bytesProcessed += processGroupOfPicturesHeader(p);
-                //bytesProcessed += skip_to_next_start_code(p);
+                //bytesProcessed += skipToNextStartCode(p);
             break;
 
             default:
@@ -128,7 +123,7 @@ RETRY:
                    startCode <= slice_start_codes_end)
                 {
                     //bytesProcessed += process_slice(p);
-                    bytesProcessed += skip_to_next_start_code(p);
+                    bytesProcessed += skipToNextStartCode(p);
                 }
                 else
                 {
@@ -163,10 +158,10 @@ size_t mpeg2Parser::processSequenceHeader(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
-    validate_start_code(p, sequence_header_code);
+    validateStartCode(p, sequence_header_code);
 
-    uint32_t fourBytes = read_4_bytes(p);
-    increment_ptr(p, 4);
+    uint32_t fourBytes = read4Bytes(p);
+    incrementPtr(p, 4);
 
     uint32_t horizontal_size_value = (fourBytes & 0xFFF00000) >> 20;
     uint32_t vertical_size_value = (fourBytes & 0x000FFF00) >> 8;
@@ -176,8 +171,8 @@ size_t mpeg2Parser::processSequenceHeader(uint8_t *&p)
     //printf_xml(2, "<width>%d</width>\n", horizontal_size_value);
     //printf_xml(2, "<height>%d</height>\n", vertical_size_value);
 
-    fourBytes = read_4_bytes(p);
-    increment_ptr(p, 4);
+    fourBytes = read4Bytes(p);
+    incrementPtr(p, 4);
 
     // At this point p is one bit in to the intra_quantizer_matrix
 
@@ -190,16 +185,16 @@ size_t mpeg2Parser::processSequenceHeader(uint8_t *&p)
 
     if(load_intra_quantizer_matrix)
     {
-        increment_ptr(p, 63);
+        incrementPtr(p, 63);
         load_non_intra_quantizer_matrix = *p;
-        increment_ptr(p, 1);
+        incrementPtr(p, 1);
         load_non_intra_quantizer_matrix &= 0x1;
     }
     else
         load_non_intra_quantizer_matrix = fourBytes & 0x1;
 
     if(load_non_intra_quantizer_matrix)
-        increment_ptr(p, 64);
+        incrementPtr(p, 64);
 
     m_nextMpeg2ExtensionType = sequence_extension;
 
@@ -211,8 +206,8 @@ size_t mpeg2Parser::processSequenceExtension(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
-    uint32_t fourBytes = read_4_bytes(p);
-    increment_ptr(p, 4);
+    uint32_t fourBytes = read4Bytes(p);
+    incrementPtr(p, 4);
 
     eMpeg2ExtensionStartCodeIdentifier extension_start_code_identifier = (eMpeg2ExtensionStartCodeIdentifier) ((fourBytes & 0xF0000000) >> 28);
     assert(sequence_extension_id == extension_start_code_identifier);
@@ -226,10 +221,10 @@ size_t mpeg2Parser::processSequenceExtension(uint8_t *&p)
     // marker_bit
 
     uint8_t vbv_buffer_size_extension = *p;
-    increment_ptr(p, 1);
+    incrementPtr(p, 1);
 
     uint8_t byte = *p;
-    increment_ptr(p, 1);
+    incrementPtr(p, 1);
 
     uint8_t low_delay = (byte & 0x80) >> 7;
     uint8_t frame_rate_extension_n = (byte & 0x60) >> 5;
@@ -244,7 +239,7 @@ size_t mpeg2Parser::processSequenceDisplayExtension(uint8_t *&p)
     uint8_t *pStart = p;
 
     uint8_t byte = *p;
-    increment_ptr(p, 1);
+    incrementPtr(p, 1);
 
     uint8_t video_format = (byte & 0x0E) >> 1;
     uint8_t colour_description = byte & 0x01;
@@ -252,17 +247,17 @@ size_t mpeg2Parser::processSequenceDisplayExtension(uint8_t *&p)
     if(colour_description)
     {
         uint8_t colour_primaries = *p;
-        increment_ptr(p, 1);
+        incrementPtr(p, 1);
 
         uint8_t transfer_characteristics = *p;
-        increment_ptr(p, 1);
+        incrementPtr(p, 1);
 
         uint8_t matrix_coefficients = *p;
-        increment_ptr(p, 1);
+        incrementPtr(p, 1);
     }
 
-    uint32_t fourBytes = read_4_bytes(p);
-    increment_ptr(p, 4);
+    uint32_t fourBytes = read4Bytes(p);
+    incrementPtr(p, 4);
 
     uint16_t display_horizontal_size = (fourBytes & 0xFFFC0000) >> 18;
     // marker_bit
@@ -300,7 +295,7 @@ size_t mpeg2Parser::processExtension(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
-    validate_start_code(p, extension_start_code);
+    validateStartCode(p, extension_start_code);
 
     switch(m_nextMpeg2ExtensionType)
     {
@@ -338,10 +333,10 @@ size_t mpeg2Parser::processGroupOfPicturesHeader(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
-    validate_start_code(p, group_start_code);
+    validateStartCode(p, group_start_code);
 
-    uint32_t fourBytes = read_4_bytes(p);
-    increment_ptr(p, 4);
+    uint32_t fourBytes = read4Bytes(p);
+    incrementPtr(p, 4);
 
     uint32_t time_code =  (fourBytes & 0xFFFFFF80) >> 7;
     uint8_t closed_gop =  (fourBytes & 0x00000040) >> 6;
@@ -359,10 +354,10 @@ size_t mpeg2Parser::processPictureHeader(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
-    validate_start_code(p, picture_start_code);
+    validateStartCode(p, picture_start_code);
 
-    uint32_t fourBytes = read_4_bytes(p);
-    increment_ptr(p, 4);
+    uint32_t fourBytes = read4Bytes(p);
+    incrementPtr(p, 4);
     
     uint16_t temporal_reference = (fourBytes & 0xFFC00000) >> 22;
     uint8_t picture_coding_type = (fourBytes & 0x00380000) >> 19;
@@ -383,7 +378,7 @@ size_t mpeg2Parser::processPictureHeader(uint8_t *&p)
         forward_f_code = (fourBytes & 0x03) << 2;
 
         carry_over = *p;
-        increment_ptr(p, 1);
+        incrementPtr(p, 1);
 
         forward_f_code |= (carry_over & 0x80) >> 7;
 
@@ -396,7 +391,7 @@ size_t mpeg2Parser::processPictureHeader(uint8_t *&p)
         forward_f_code = (fourBytes & 0x03) << 2;
 
         carry_over = *p;
-        increment_ptr(p, 1);
+        incrementPtr(p, 1);
 
         forward_f_code |= (carry_over & 0x80) >> 7;
 
@@ -420,8 +415,8 @@ size_t mpeg2Parser::processPictureCodingExtension(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
-    uint32_t fourBytes = read_4_bytes(p);
-    increment_ptr(p, 4);
+    uint32_t fourBytes = read4Bytes(p);
+    incrementPtr(p, 4);
 
     eMpeg2ExtensionStartCodeIdentifier extension_start_code_identifier = (eMpeg2ExtensionStartCodeIdentifier) ((fourBytes & 0xF0000000) >> 28);
     assert(picture_coding_extension_id == extension_start_code_identifier);
@@ -444,7 +439,7 @@ size_t mpeg2Parser::processPictureCodingExtension(uint8_t *&p)
     uint8_t chroma_420_type            = fourBytes & 0x00000001;
 
     uint32_t byte = *p;
-    increment_ptr(p, 1);
+    incrementPtr(p, 1);
 
     uint8_t progressive_frame      = (byte & 0x80) >> 7;
     uint8_t composite_display_flag = (byte & 0x40) >> 6;
@@ -457,14 +452,14 @@ size_t mpeg2Parser::processPictureCodingExtension(uint8_t *&p)
         uint8_t burst_amplitude    = (byte & 0x01) << 6;
 
         byte = *p;
-        increment_ptr(p, 1);
+        incrementPtr(p, 1);
 
         burst_amplitude |= (byte & 0xFC) >> 2;
 
         uint8_t sub_carrier_phase = (byte & 0x03) << 6;
 
         byte = *p;
-        increment_ptr(p, 1);
+        incrementPtr(p, 1);
 
         sub_carrier_phase |= (byte & 0xFC) >>2;
     }
@@ -477,9 +472,9 @@ size_t mpeg2Parser::processUserData(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
-    validate_start_code(p, user_data_start_code);
+    validateStartCode(p, user_data_start_code);
 
-    next_start_code(p);
+    nextStartCode(p);
 
     return p - pStart;
 }
@@ -489,15 +484,15 @@ size_t mpeg2Parser::processSlice(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
-    uint32_t fourBytes = read_4_bytes(p);
-    increment_ptr(p, 4);
+    uint32_t fourBytes = read4Bytes(p);
+    incrementPtr(p, 4);
 
     uint32_t start_code_prefix = (fourBytes & 0xFFFFFF00) >> 8;
     assert(0x000001 == start_code_prefix);
 
     uint8_t slice_number = fourBytes & 0xff;
 
-    next_start_code(p);
+    nextStartCode(p);
 
     return p - pStart;
 }
