@@ -58,7 +58,7 @@ Value	StreamType	                        Value	StreamType
 0x10 = MPEG - 4 Video                       0xa0 = MSCODEC Video
 0x11 = MPEG - 4 LATM AAC Audio              0xea = Private ES(VC - 1)
 */
-enum mpts_e_stream_type
+enum eMptsStreamType
 {
     eReserved                                   = 0x0, 
     eMPEG1_Video                                = 0x1, 
@@ -98,7 +98,7 @@ enum mpts_e_stream_type
     ePrivate_ES_VC1                             = 0xea
 };
 
-enum mpts_e_stream_id
+enum eMptsStreamId
 {
     program_stream_map = 0xBC,
     private_stream_1 = 0xBD,
@@ -171,7 +171,7 @@ Decimal	    Hexadecimal	    Description
 8191	    0x1FFF	        Null Packet (used for fixed bandwidth padding)
 */
 
-enum mpts_packet_identifier
+enum eMptsPacketIdentifier
 {
     ePAT = 0x00,
     eCAT = 0x01,
@@ -198,29 +198,29 @@ enum mpts_packet_identifier
     eNull = 0x1FFF
 };
 
-struct mpts_pid_entry_type
+struct mptsPidEntryType
 {
-    std::string pid_name;
-    unsigned int num_packets;
-    int64_t pid_byte_location;
+    std::string pidName;
+    unsigned int numPackets;
+    int64_t pidByteLocation;
 
-    mpts_pid_entry_type(std::string pid_name, unsigned int num_packets, int64_t pid_byte_location)
-        : pid_name(pid_name)
-        , num_packets(num_packets)
-        , pid_byte_location(pid_byte_location)
+    mptsPidEntryType(std::string pidName, unsigned int numPackets, int64_t pidByteLocation)
+        : pidName(pidName)
+        , numPackets(numPackets)
+        , pidByteLocation(pidByteLocation)
     {
     }
 };
 
-typedef std::vector<mpts_pid_entry_type> mpts_pid_list_type;
+typedef std::vector<mptsPidEntryType> mptsPidListType;
 
 struct mpts_frame
 {
     int pid;
     int frameNumber;
     int totalPackets;
-    mpts_pid_list_type pidList;
-    mpts_e_stream_type streamType;
+    mptsPidListType pidList;
+    eMptsStreamType streamType;
 
     mpts_frame()
         : pid(-1)
@@ -230,72 +230,72 @@ struct mpts_frame
     {}
 };
 
-class mpts_parser
+class mptsParser
 {
 public:
-    mpts_parser(size_t &file_position);
-    ~mpts_parser();
+    mptsParser(size_t &filePosition);
+    ~mptsParser();
 
     int determine_packet_size(uint8_t buffer[5]);
 
-    int16_t read_pat(uint8_t *&p, bool payload_unit_start);
-    int16_t read_pmt(uint8_t *&p, bool payload_unit_start);
-    size_t read_descriptors(uint8_t *p, uint16_t program_info_length);
+    int16_t readPAT(uint8_t *&p, bool payloadUnitStart);
+    int16_t readPMT(uint8_t *&p, bool payloadUnitStart);
+    size_t readDescriptors(uint8_t *p, uint16_t programInfoLength);
 
-    size_t process_PES_packet_header(uint8_t *&p, size_t PES_packet_data_length);
-    size_t process_PES_packet(uint8_t *&packet_start, uint8_t *&p, mpts_e_stream_type stream_type, bool payload_unit_start);
-    int16_t process_pid(uint16_t pid, uint8_t *&packet_start, uint8_t *&p, int64_t packet_start_in_file, size_t packet_num, bool payload_unit_start, uint8_t adaptation_field_length);
-    uint8_t get_adaptation_field_length(uint8_t *&p);
-    uint8_t process_adaptation_field(unsigned int indent, uint8_t *&p);
-    int16_t process_packet(uint8_t *packet, size_t packetNum);
-    size_t process_video_frames(uint8_t *p, size_t PES_packet_data_length, mpts_e_stream_type streamType, unsigned int frames_wanted, unsigned int &frames_received, bool b_xml_out);
+    size_t processPESPacketHeader(uint8_t *&p, size_t PESPacketDataLength);
+    size_t processPESPacket(uint8_t *&packetStart, uint8_t *&p, eMptsStreamType streamType, bool payloadUnitStart);
+    int16_t processPid(uint16_t pid, uint8_t *&packetStart, uint8_t *&p, int64_t packetStartInFile, size_t packetNum, bool payloadUnitStart, uint8_t adaptationFieldLength);
+    uint8_t getAdaptationFieldLength(uint8_t *&p);
+    uint8_t processAdaptationField(unsigned int indent, uint8_t *&p);
+    int16_t processPacket(uint8_t *packet, size_t packetNum);
+    size_t processVideoFrames(uint8_t *p, size_t PESPacketDataLength, eMptsStreamType streamType, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut);
 
-    size_t push_video_data(uint8_t *p, size_t size);
-    size_t pop_video_data();
-    size_t compact_video_data(size_t bytes_to_compact);
-    size_t get_video_data_size();
+    size_t pushVideoData(uint8_t *p, size_t size);
+    size_t popVideoData();
+    size_t compactVideoData(size_t bytesToCompact);
+    size_t getVideoDataSize();
 
-    void print_frame_info(mpts_frame *p_frame);
+    void printFrameInfo(mpts_frame *pFrame);
 
-    bool set_print_xml(bool tf);
-    bool get_print_xml();
+    bool setPrintXml(bool tf);
+    bool getPrintXml();
 
-    bool set_terse(bool tf);
-    bool get_terse();
+    bool setTerse(bool tf);
+    bool getTerse();
 
-    bool set_analyze_elementary_stream(bool tf);
-    bool get_analyze_elementary_stream();
+    bool setAnalyzeElementaryStream(bool tf);
+    bool getAnalyzeElementaryStream();
 
     void flush();
 
 private:
 
-    void inline printf_xml(unsigned int indent_level, const char *format, ...);
-    void inline inc_ptr(uint8_t *&p, size_t bytes);
-    void init_stream_types(std::map <uint16_t, char *> &stream_map);
+    void inline printfXml(unsigned int indentLevel, const char *format, ...);
+    void inline incPtr(uint8_t *&p, size_t bytes);
+    void initStreamTypes(std::map <uint16_t, char *> &streamMap);
 
-    uint64_t read_time_stamp(uint8_t *&p);
-    float convert_time_stamp(uint64_t time_stamp);
+    uint64_t readTimeStamp(uint8_t *&p);
+    float convertTimeStamp(uint64_t timeStamp);
 
-    uint8_t *m_p_video_data;
-    size_t &m_file_position;
-    unsigned int m_packet_size;
-    int16_t m_program_number;
-    int16_t m_program_map_pid;
-    int16_t m_network_pid; // TODO: this is stored but not used
-    int16_t m_scte35_pid; // TODO: this is stored but not used
-    size_t m_video_data_size;
-    size_t m_video_buffer_size;
+    uint8_t *m_pVideoData;
+    size_t &m_filePosition;
+    unsigned int m_packetSize;
+    int16_t m_programNumber;
+    int16_t m_programMapPid;
+    int16_t m_networkPid; // TODO: this is stored but not used
+    int16_t m_scte35Pid; // TODO: this is stored but not used
+    size_t m_videoDataSize;
+    size_t m_videoBufferSize;
 
-    std::map <uint16_t, char *> m_pid_map; // ID, name
-    std::map <uint16_t, mpts_e_stream_type> m_pid_to_type_map; // PID, stream type
+    std::map <uint16_t, char *> m_pidMap; // ID, name
+    std::map <uint16_t, eMptsStreamType> m_pidToTypeMap; // PID, stream type
 
-    bool m_b_xml;
-    bool m_b_terse;
-    bool m_b_analyze_elementary_stream;
+    bool m_bXml;
+    bool m_bTerse;
+    bool m_bAnalyzeElementaryStream;
 
-    mpts_frame m_video_frame;
-    mpts_frame m_audio_frame;
+    mpts_frame m_videoFrame;
+    mpts_frame m_audioFrame;
 
     std::shared_ptr<baseParser> m_parser;
 };

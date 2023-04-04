@@ -105,10 +105,10 @@ int main(int argc, char* argv[])
             bAnalyzeElementaryStream = true;
     }
 
-    mpts_parser mpts(filePosition);
-    mpts.set_print_xml(g_b_xml);
-    mpts.set_terse(bTerse);
-    mpts.set_analyze_elementary_stream(bAnalyzeElementaryStream);
+    mptsParser mpts(filePosition);
+    mpts.setPrintXml(g_b_xml);
+    mpts.setTerse(bTerse);
+    mpts.setAnalyzeElementaryStream(bAnalyzeElementaryStream);
 
     uint8_t *packetBuffer, *packet;
 	uint16_t programMapPid = 0;
@@ -193,9 +193,9 @@ int main(int argc, char* argv[])
 //            __debugbreak();
 
         if(192 == packetSize)
-            err = mpts.process_packet(packet + 4, packetNum);
+            err = mpts.processPacket(packet + 4, packetNum);
         else
-            err = mpts.process_packet(packet, packetNum);
+            err = mpts.processPacket(packet, packetNum);
 
         if(0 != err)
             goto error;
