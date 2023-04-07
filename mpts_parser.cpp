@@ -33,10 +33,8 @@
 #include <cstdarg>
 #include <vector>
 #include <map>
-//#include "tinyxml2.h"
 
 #include "mpts_parser.h"
-#include "utils.h"
 #include "mpeg2_parser.h"
 #include "avc_parser.h"
 
@@ -103,7 +101,7 @@ static inline size_t skipToNextStartCode(uint8_t *&p)
 {
     uint8_t *pStart = p;
 
-    uint32_t fourBytes = read4Bytes(p);
+    uint32_t fourBytes = util::read4Bytes(p);
     incrementPtr(p, 4);
 
     nextStartCode(p);
@@ -113,7 +111,7 @@ static inline size_t skipToNextStartCode(uint8_t *&p)
 
 static inline size_t validateStartCode(uint8_t *&p, uint32_t start_code)
 {
-    uint32_t fourBytes = read4Bytes(p);
+    uint32_t fourBytes = util::read4Bytes(p);
     incrementPtr(p, 4);
 
     uint32_t start_code_prefix = (fourBytes & 0xFFFFFF00) >> 8;
@@ -184,27 +182,9 @@ bool mptsParser::getAnalyzeElementaryStream()
     return m_bAnalyzeElementaryStream;
 }
 
-void inline mptsParser::printfXml(unsigned int indentLevel, const char *format, ...)
-{
-    if(m_bXml && format)
-    {
-        char outputBuffer[512] = "";
-
-        for(unsigned int i = 0; i < indentLevel; i++)
-            strcat_s(outputBuffer, sizeof(outputBuffer), "  ");
-
-        va_list arg_list;
-        va_start(arg_list, format);
-        vsprintf_s(outputBuffer + (indentLevel *2), sizeof(outputBuffer) - (indentLevel *2), format, arg_list);
-        va_end(arg_list);
-
-        printf(outputBuffer);
-    }
-}
-
 void inline mptsParser::incPtr(uint8_t *&p, size_t bytes)
 {
-    m_filePosition += incrementPtr(p, bytes);
+    m_filePosition += util::incrementPtr(p, bytes);
 }
 
 // Initialize a map of ID to string type
@@ -314,14 +294,14 @@ int16_t mptsParser::readPAT(uint8_t *&p, bool payloadUnitStart)
 
     uint8_t table_id = *p;
     incPtr(p, 1);
-    uint16_t section_length = read2Bytes(p);
+    uint16_t section_length = util::read2Bytes(p);
     incPtr(p, 2);
     uint8_t section_syntax_indicator = (0x8000 & section_length) >> 15;
     section_length &= 0xFFF;
 
     uint8_t *p_section_start = p;
 
-    uint16_t transport_stream_id = read2Bytes(p);
+    uint16_t transport_stream_id = util::read2Bytes(p);
     incPtr(p, 2);
 
     uint8_t current_next_indicator = *p;
@@ -348,20 +328,20 @@ int16_t mptsParser::readPAT(uint8_t *&p, bool payloadUnitStart)
 
     while ((p - p_section_start) < (section_length - 4))
     {
-        m_programNumber = read2Bytes(p);
+        m_programNumber = util::read2Bytes(p);
         incPtr(p, 2);
         uint16_t network_pid = 0;
 
         if (0 == m_programNumber)
         {
-            network_pid = read2Bytes(p);
+            network_pid = util::read2Bytes(p);
             incPtr(p, 2);
             network_pid &= 0x1FFF;
             m_networkPid = network_pid;
         }
         else
         {
-            m_programMapPid = read2Bytes(p);
+            m_programMapPid = util::read2Bytes(p);
             incPtr(p, 2);
             m_programMapPid &= 0x1FFF;
         }
@@ -400,14 +380,14 @@ int16_t mptsParser::readPMT(uint8_t *&p, bool payloadUnitStart)
 
     uint8_t table_id = *p;
     incPtr(p, 1);
-    uint16_t section_length = read2Bytes(p);
+    uint16_t section_length = util::read2Bytes(p);
     incPtr(p, 2);
     uint8_t section_syntax_indicator = section_length & 0x80 >> 15;
     section_length &= 0xFFF;
 
     uint8_t *p_section_start = p;
 
-    uint16_t program_number = read2Bytes(p);
+    uint16_t program_number = util::read2Bytes(p);
     incPtr(p, 2);
 
     uint8_t current_next_indicator = *p;
@@ -420,13 +400,13 @@ int16_t mptsParser::readPMT(uint8_t *&p, bool payloadUnitStart)
     uint8_t last_section_number = *p;
     incPtr(p, 1);
 
-    uint16_t pcr_pid = read2Bytes(p);
+    uint16_t pcr_pid = util::read2Bytes(p);
     incPtr(p, 2);
     pcr_pid &= 0x1FFF;
 
     m_pidMap[pcr_pid] = "PCR";
 
-    uint16_t program_info_length = read2Bytes(p);
+    uint16_t program_info_length = util::read2Bytes(p);
     incPtr(p, 2);
 
     program_info_length &= 0x3FF;
@@ -463,11 +443,11 @@ int16_t mptsParser::readPMT(uint8_t *&p, bool payloadUnitStart)
     {
         uint8_t stream_type = *p;
         incPtr(p, 1);
-        uint16_t elementary_pid = read2Bytes(p);
+        uint16_t elementary_pid = util::read2Bytes(p);
         incPtr(p, 2);
         elementary_pid &= 0x1FFF;
 
-        uint16_t es_info_length = read2Bytes(p);
+        uint16_t es_info_length = util::read2Bytes(p);
         incPtr(p, 2);
         es_info_length &= 0xFFF;
 
@@ -632,7 +612,7 @@ size_t mptsParser::readDescriptors(uint8_t *p, uint16_t programInfoLength)
                     }
                 */
 
-                uint32_t format_identifier = read4Bytes(p);
+                uint32_t format_identifier = util::read4Bytes(p);
                 incPtr(p, 4);
 
                 if(0x43554549 == format_identifier)
@@ -996,7 +976,7 @@ size_t mptsParser::processPESPacketHeader(uint8_t *&p, size_t PESPacketDataLengt
 {
     uint8_t *pStart = p;
 
-    uint32_t fourBytes = read4Bytes(p);
+    uint32_t fourBytes = util::read4Bytes(p);
     incPtr(p, 4);
 
     uint32_t packet_start_code_prefix = (fourBytes & 0xffffff00) >> 8;
@@ -1008,7 +988,7 @@ size_t mptsParser::processPESPacketHeader(uint8_t *&p, size_t PESPacketDataLengt
       PES packets whose payload consists of bytes from a video elementary stream contained in Transport Stream packets.
     */
 
-    int64_t PES_packet_length = read2Bytes(p);
+    int64_t PES_packet_length = util::read2Bytes(p);
     incPtr(p, 2);
 
     if (0 == PES_packet_length)
@@ -1186,7 +1166,7 @@ size_t mptsParser::processPESPacketHeader(uint8_t *&p, size_t PESPacketDataLengt
 
         if(PES_CRC_flag)
         {
-            uint16_t previous_PES_packet_CRC = read2Bytes(p);
+            uint16_t previous_PES_packet_CRC = util::read2Bytes(p);
             incPtr(p, 2);
         }
 
@@ -1235,7 +1215,7 @@ size_t mptsParser::processPESPacketHeader(uint8_t *&p, size_t PESPacketDataLengt
 
             if(P_STD_buffer_flag)
             {
-                uint16_t two_bytes = read2Bytes(p);
+                uint16_t two_bytes = util::read2Bytes(p);
                 incPtr(p, 2);
 
                 uint8_t P_STD_buffer_scale = (two_bytes & 0x2000) >> 13;
@@ -1322,7 +1302,7 @@ size_t mptsParser::processPESPacket(uint8_t *&packetStart, uint8_t *&p, eMptsStr
     }
 
     // Peek at the next 6 bytes to figure out stream_id
-    uint32_t fourBytes = read4Bytes(p);
+    uint32_t fourBytes = util::read4Bytes(p);
 
     uint32_t packet_start_code_prefix = (fourBytes & 0xffffff00) >> 8;
     uint8_t stream_id = fourBytes & 0xff;
@@ -1333,7 +1313,7 @@ size_t mptsParser::processPESPacket(uint8_t *&packetStart, uint8_t *&p, eMptsStr
       PES packets whose payload consists of bytes from a video elementary stream contained in Transport Stream packets.
     */
 
-    int64_t PES_packet_length = read2Bytes(p+4);
+    int64_t PES_packet_length = util::read2Bytes(p+4);
 
     if(0 == PES_packet_length)
         PES_packet_length = m_packetSize - (p - packetStart);
@@ -1459,49 +1439,33 @@ int16_t mptsParser::processPid(uint16_t pid, uint8_t *&packetStart, uint8_t *&p,
 
     if(ePAT == pid) // PAT - Program Association Table
     {
-        static bool g_b_want_pat = true;
-
-        if(g_b_want_pat)
+        if(m_bTerse)
         {
-            if(m_bTerse)
-            {
-                printfXml(1, "<packet start=\"%llu\">\n", packetStartInFile);
-                printfXml(2, "<number>%zd</number>\n", packetNum);
-                printfXml(2, "<pid>0x%x</pid>\n", pid);
-                printfXml(2, "<payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payloadUnitStart ? 1 : 0);
-            }
-
-            readPAT(p, payloadUnitStart);
-
-            if(m_bTerse)
-                printfXml(1, "</packet>\n");
+            printfXml(1, "<packet start=\"%llu\">\n", packetStartInFile);
+            printfXml(2, "<number>%zd</number>\n", packetNum);
+            printfXml(2, "<pid>0x%x</pid>\n", pid);
+            printfXml(2, "<payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payloadUnitStart ? 1 : 0);
         }
 
+        readPAT(p, payloadUnitStart);
+
         if(m_bTerse)
-            g_b_want_pat = false;
+            printfXml(1, "</packet>\n");
     }
     else if(m_programMapPid == pid)
     {
-        static bool g_b_want_pmt = true;
-
-        if(g_b_want_pmt)
+        if(m_bTerse)
         {
-            if(m_bTerse)
-            {
-                printfXml(1, "<packet start=\"%llu\">\n", packetStartInFile);
-                printfXml(2, "<number>%zd</number>\n", packetNum);
-                printfXml(2, "<pid>0x%x</pid>\n", pid);
-                printfXml(2, "<payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payloadUnitStart ? 1 : 0);
-            }
-
-            readPMT(p, payloadUnitStart);
-
-            if(m_bTerse)
-                printfXml(1, "</packet>\n");
+            printfXml(1, "<packet start=\"%llu\">\n", packetStartInFile);
+            printfXml(2, "<number>%zd</number>\n", packetNum);
+            printfXml(2, "<pid>0x%x</pid>\n", pid);
+            printfXml(2, "<payload_unit_start_indicator>0x%x</payload_unit_start_indicator>\n", payloadUnitStart ? 1 : 0);
         }
 
+        readPMT(p, payloadUnitStart);
+
         if(m_bTerse)
-            g_b_want_pmt = false;
+            printfXml(1, "</packet>\n");
     }
     else if(pid >= eAsNeededStart && pid <= eAsNeededEnd)
     {
@@ -1558,6 +1522,7 @@ int16_t mptsParser::processPid(uint16_t pid, uint8_t *&packetStart, uint8_t *&p,
 
                 if(payloadUnitStart)
                 {
+                    // When we get the start of a new payload decode and gather information about the previous payload
                     printFrameInfo(p_frame);
 
                     p_frame->pidList.clear();
@@ -1620,10 +1585,10 @@ uint8_t mptsParser::processAdaptationField(unsigned int indent, uint8_t *&p)
 
         if(PCR_flag)
         {
-            uint32_t fourBytes = read4Bytes(p);
+            uint32_t fourBytes = util::read4Bytes(p);
             incPtr(p, 4);
 
-            uint16_t two_bytes = read2Bytes(p);
+            uint16_t two_bytes = util::read2Bytes(p);
             incPtr(p, 2);
 
             uint64_t program_clock_reference_base = fourBytes;
@@ -1635,10 +1600,10 @@ uint8_t mptsParser::processAdaptationField(unsigned int indent, uint8_t *&p)
 
         if(OPCR_flag)
         {
-            uint32_t fourBytes = read4Bytes(p);
+            uint32_t fourBytes = util::read4Bytes(p);
             incPtr(p, 4);
 
-            uint16_t two_bytes = read2Bytes(p);
+            uint16_t two_bytes = util::read2Bytes(p);
             incPtr(p, 2);
 
             uint64_t original_program_clock_reference_base = fourBytes;
@@ -1679,7 +1644,7 @@ uint8_t mptsParser::processAdaptationField(unsigned int indent, uint8_t *&p)
 
             if(ltw_flag)
             {
-                uint16_t two_bytes = read2Bytes(p);
+                uint16_t two_bytes = util::read2Bytes(p);
                 incPtr(p, 2);
 
                 uint8_t ltw_valid_flag = (two_bytes & 0x8000) >> 15;
@@ -1688,7 +1653,7 @@ uint8_t mptsParser::processAdaptationField(unsigned int indent, uint8_t *&p)
 
             if(piecewise_rate_flag)
             {
-                uint16_t two_bytes = read2Bytes(p);
+                uint16_t two_bytes = util::read2Bytes(p);
                 incPtr(p, 2);
 
                 uint32_t piecewise_rate = two_bytes & 0x3fffff;
@@ -1703,12 +1668,12 @@ uint8_t mptsParser::processAdaptationField(unsigned int indent, uint8_t *&p)
                 uint8_t splice_type = (byte & 0xf0) >> 4;
                 DTS_next_AU = (byte & 0xe) << 28;
 
-                uint32_t two_bytes = read2Bytes(p);
+                uint32_t two_bytes = util::read2Bytes(p);
                 incPtr(p, 2);
 
                 DTS_next_AU |= (two_bytes & 0xfe) << 13;
 
-                two_bytes = read2Bytes(p);
+                two_bytes = util::read2Bytes(p);
                 incPtr(p, 2);
 
                 DTS_next_AU |= (two_bytes & 0xfe) >> 1;
@@ -1752,7 +1717,7 @@ int16_t mptsParser::processPacket(uint8_t *packet, size_t packetNum)
     // Skip the sync byte 0x47
     incPtr(p, 1);
 
-    uint16_t pid = read2Bytes(p);
+    uint16_t pid = util::read2Bytes(p);
     incPtr(p, 2);
 
     uint8_t transport_error_indicator = (pid & 0x8000) >> 15;
@@ -1816,12 +1781,12 @@ uint64_t mptsParser::readTimeStamp(uint8_t *&p)
 
     uint64_t time_stamp = (byte & 0x0E) << 29;
 
-    uint64_t two_bytes = read2Bytes(p);
+    uint64_t two_bytes = util::read2Bytes(p);
     incPtr(p, 2);
 
     time_stamp |= (two_bytes & 0xFFFE) << 14;
 
-    two_bytes = read2Bytes(p);
+    two_bytes = util::read2Bytes(p);
     incPtr(p, 2);
 
     time_stamp |= (two_bytes & 0xFFFE) >> 1;
@@ -1849,13 +1814,13 @@ size_t mptsParser::processVideoFrames(uint8_t *p,
     while(bytesProcessed < (PESPacketDataLength - 4) && !bDone)
     {
 RETRY:
-        uint32_t start_code = read4Bytes(p);
+        uint32_t start_code = util::read4Bytes(p);
         uint32_t start_code_prefix = (start_code & 0xFFFFFF00) >> 8;
 
         if(0x000001 != start_code_prefix)
         {
             fprintf(stderr, "WARNING: Bad data found %llu bytes into this frame.  Searching for next start code...\n", bytesProcessed);
-            size_t count = nextStartCode(p, PESPacketDataLength);
+            size_t count = util::nextStartCode(p, PESPacketDataLength);
 
             if(-1 == count)
             {
@@ -1883,7 +1848,7 @@ RETRY:
                 // Sometimes we come out of process_PES_packet_header and we are not at 0x00000001, I don't know why...
                 // So, for now, if we are not at 0x00000001, lets find it.
 
-                uint32_t fourBytes = read4Bytes(p);
+                uint32_t fourBytes = util::read4Bytes(p);
 
                 if(0x00000001 != fourBytes)
                     bytesProcessed += nextNaluStartCode(p);

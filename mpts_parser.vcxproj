@@ -23,8 +23,7 @@
     <ClCompile Include="mpts_parser.cpp" />
     <ClCompile Include="parsers\avc_parser.cpp" />
     <ClCompile Include="parsers\mpeg2_parser.cpp" />
-    <ClCompile Include="third_party\tinyxml2\tinyxml2.cpp" />
-    <ClCompile Include="utils.cpp" />
+    <ClCompile Include="util.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="bit_stream.h" />
@@ -32,7 +31,7 @@
     <ClInclude Include="parsers\avc_parser.h" />
     <ClInclude Include="parsers\base_parser.h" />
     <ClInclude Include="parsers\mpeg2_parser.h" />
-    <ClInclude Include="utils.h" />
+    <ClInclude Include="util.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{09719020-39D0-47D3-8873-FF87BECA634E}</ProjectGuid>

@@ -1,6 +1,6 @@
 ﻿#include "avc_parser.h"
 #include <cmath>
-#include "utils.h"
+#include "util.h"
 #include "bit_stream.h"
 
 static void printfXml(unsigned int indentLevel, const char *format, ...)
@@ -34,14 +34,14 @@ size_t avcParser::processVideoFrames(uint8_t *p, size_t PESPacketDataLength, uns
     {
         // See section: B.2 Byte stream NAL unit decoding process
         // Eat leading_zero_8bits and trailing_zero_8bits with this loop
-        uint32_t threeBytes = read3Bytes(p);
+        uint32_t threeBytes = util::read3Bytes(p);
         while (0x000001 != threeBytes)
         {
-            incrementPtr(p, 1);
-            threeBytes = read3Bytes(p);
+            util::incrementPtr(p, 1);
+            threeBytes = util::read3Bytes(p);
         }
 
-        incrementPtr(p, 3);
+        util::incrementPtr(p, 3);
 
         int64_t NumBytesInNALunit = 0;
         if (0x000001 == threeBytes)
@@ -52,14 +52,14 @@ size_t avcParser::processVideoFrames(uint8_t *p, size_t PESPacketDataLength, uns
             // We have an AnnexB NALU, find the next 0x00000001 and count bytes
             while ((size_t)(p - packetStart) < (PESPacketDataLength - 4) && !bFound)
             {
-                threeBytes = read3Bytes(p);
+                threeBytes = util::read3Bytes(p);
 
                 // B.2 Point 3
                 if (0x000000 == threeBytes ||
                     0x000001 == threeBytes)
                         bFound = true;
                 else
-                    incrementPtr(p, 1);
+                    util::incrementPtr(p, 1);
             }
 
             NumBytesInNALunit = p - pNaluStart;
@@ -82,7 +82,7 @@ size_t avcParser::processVideoFrames(uint8_t *p, size_t PESPacketDataLength, uns
         uint8_t *pNaluDataStart = p;
 
         uint8_t byte = *p;
-        incrementPtr(p, 1);
+        util::incrementPtr(p, 1);
 
         assert(0 == (byte & 0x80)); // Forbidden zero bit
 
@@ -162,12 +162,12 @@ size_t avcParser::processSeiMessage(uint8_t*& p, uint8_t* pLastByte)
 
         while (*p == 0xFF)
         {
-            incrementPtr(p, 1);
+            util::incrementPtr(p, 1);
             payloadType += 255;
         }
 
         uint8_t last_payload_type_byte = *p;
-        incrementPtr(p, 1);
+        util::incrementPtr(p, 1);
 
         payloadType += last_payload_type_byte;
 
@@ -175,12 +175,12 @@ size_t avcParser::processSeiMessage(uint8_t*& p, uint8_t* pLastByte)
 
         while (*p == 0xFF)
         {
-            incrementPtr(p, 1);
+            util::incrementPtr(p, 1);
             payloadSize += 255;
         }
 
         uint8_t last_payload_size_byte = *p;
-        incrementPtr(p, 1);
+        util::incrementPtr(p, 1);
 
         payloadSize += last_payload_size_byte;
 
@@ -265,12 +265,12 @@ size_t avcParser::processSequenceParameterSet(uint8_t *&p)
     uint8_t *pStart = p;
 
     uint8_t byte = *p;
-    incrementPtr(p, 1);
+    util::incrementPtr(p, 1);
 
     uint8_t profile_idc = byte;
 
     byte = *p;
-    incrementPtr(p, 1);
+    util::incrementPtr(p, 1);
 
     uint8_t constraint_set0_flag = (byte & 0x80) >> 7;
     uint8_t constraint_set1_flag = (byte & 0x40) >> 6;
@@ -281,7 +281,7 @@ size_t avcParser::processSequenceParameterSet(uint8_t *&p)
     // reserved_zero_2_bits
 
     byte = *p;
-    incrementPtr(p, 1);
+    util::incrementPtr(p, 1);
 
     uint8_t level_idc = byte;
 
@@ -363,7 +363,7 @@ size_t avcParser::processAccessUnitDelimiter(uint8_t*& p)
     uint8_t* pStart = p;
 
     uint8_t primary_pic_type = (*p & 0xE0) >> 5;
-    incrementPtr(p, 1);
+    util::incrementPtr(p, 1);
 
     return p - pStart;
 }

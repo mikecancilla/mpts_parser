@@ -30,6 +30,7 @@
 #include <memory>
 #include <cstdint>
 #include <base_parser.h>
+#include "util.h"
 
 // Type definitions
 
@@ -270,7 +271,15 @@ public:
 
 private:
 
-    void inline printfXml(unsigned int indentLevel, const char *format, ...);
+    template<typename... Args>
+    void printfXml(int indentLevel, Args... args)
+    {
+        if (m_bXml)
+        {
+            util::printfXml(indentLevel, args...);
+        }
+    }
+
     void inline incPtr(uint8_t *&p, size_t bytes);
     void initStreamTypes(std::map <uint16_t, char *> &streamMap);
 
