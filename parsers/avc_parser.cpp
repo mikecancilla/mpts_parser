@@ -3,24 +3,6 @@
 #include "util.h"
 #include "bit_stream.h"
 
-static void printfXml(unsigned int indentLevel, const char *format, ...)
-{
-    if(format)
-    {
-        char outputBuffer[512] = "";
-
-        for(unsigned int i = 0; i < indentLevel; i++)
-            strcat_s(outputBuffer, sizeof(outputBuffer), "  ");
-
-        va_list argList;
-        va_start(argList, format);
-        vsprintf_s(outputBuffer + (indentLevel*2), sizeof(outputBuffer) - (indentLevel*2), format, argList);
-        va_end(argList);
-
-        printf(outputBuffer);
-    }
-}
-
 size_t avcParser::processVideoFrames(uint8_t *p, size_t PESPacketDataLength, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut)
 {
     m_bXmlOut = bXmlOut;
@@ -132,7 +114,7 @@ size_t avcParser::processVideoFrames(uint8_t *p, size_t PESPacketDataLength, uns
                 break;
 
             case eAVCNaluType_CodedSliceIdrPicture:
-                printfXml(2, "<closed_gop>%d</closed_gop>\n", 1);
+                util::printfXml(2, "<closed_gop>%d</closed_gop>\n", 1);
 
             case eAVCNaluType_CodedSliceAuxiliaryPicture:
             case eAVCNaluType_CodedSliceNonIdrPicture:
@@ -247,7 +229,7 @@ size_t avcParser::processSliceHeader(uint8_t*& p)
     9               SI (SI slice)
     */
 
-    printfXml(2, "<type>%c</type>\n", "PBIPIPBIPI"[slice_type]);
+    util::printfXml(2, "<type>%c</type>\n", "PBIPIPBIPI"[slice_type]);
 
     return p - pStart;
 }

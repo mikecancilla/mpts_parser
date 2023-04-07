@@ -28,24 +28,6 @@
 #include "mpeg2_parser.h"
 #include "util.h"
 
-static void inline printfXml(unsigned int indentLevel, const char *format, ...)
-{
-    if(format)
-    {
-        char outputBuffer[512] = "";
-
-        for(unsigned int i = 0; i < indentLevel; i++)
-            strcat_s(outputBuffer, sizeof(outputBuffer), "  ");
-
-        va_list argList;
-        va_start(argList, format);
-        vsprintf_s(outputBuffer + (indentLevel*2), sizeof(outputBuffer) - (indentLevel*2), format, argList);
-        va_end(argList);
-
-        printf(outputBuffer);
-    }
-}
-
 size_t mpeg2Parser::processVideoFrames(uint8_t *p, size_t PESPacketDataLength, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut)
 {
     m_bXmlOut = bXmlOut;
@@ -342,7 +324,7 @@ size_t mpeg2Parser::processGroupOfPicturesHeader(uint8_t *&p)
     uint8_t closed_gop =  (fourBytes & 0x00000040) >> 6;
     uint8_t broken_link = (fourBytes & 0x00000020) >> 5;
 
-    printfXml(2, "<closed_gop>%d</closed_gop>\n", closed_gop);
+    util::printfXml(2, "<closed_gop>%d</closed_gop>\n", closed_gop);
 
     m_nextMpeg2ExtensionType = extension_and_user_data_1;
 
@@ -370,7 +352,7 @@ size_t mpeg2Parser::processPictureHeader(uint8_t *&p)
     uint8_t full_pel_backward_vector = 0;
     uint8_t backward_f_code = 0;
 
-    printfXml(2, "<type>%c</type>\n", " IPB"[picture_coding_type]);
+    util::printfXml(2, "<type>%c</type>\n", " IPB"[picture_coding_type]);
 
     if(2 == picture_coding_type)
     {
