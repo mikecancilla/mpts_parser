@@ -1,4 +1,5 @@
-#include <base_parser.h>
+#include "base_parser.h"
+#include "avc_parameters.h"
 
 class BitStream;
 
@@ -72,22 +73,66 @@ enum eAVCLevel {
   eAVCLevel5_2  = 51
 };
 
+enum eAVCVideoFormat {
+    eAVCVideoFormatComponent   = 0,
+    eAVCVideoFormatPAL         = 1,
+    eAVCVideoFormatNTSC        = 2,
+    eAVCVideoFormatSECAM       = 3,
+    eAVCVideoFormatMAC         = 4,
+    eAVCVideoFormatUnspecified = 5,
+    eAVCVideoFormatReserved1   = 6,
+    eAVCVideoFormatReserved2   = 7
+};
+
+struct ProcessNaluResult
+{
+    ProcessNaluResult()
+    {
+        bytes = 0;
+        result = eAVCNaluType_Unspecified;
+    }
+
+    size_t       bytes;
+    eAVCNaluType result;
+};
+
+enum eParseResult
+{
+    eParseResultError = -1,
+    eParseResultGeneric = 0,
+    eParseResultPicture = 1
+};
+
 class avcParser : public baseParser
 {
 public:
-    // Process framesWanted frames at a time
-    virtual size_t processVideoFrames(uint8_t *p, size_t PES_packet_data_length, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut = false) override;
+    virtual size_t processVideoFrame(uint8_t* p,
+        size_t dataLength,
+        std::any& returnedData) override;
+
+    ProcessNaluResult processNalu(uint8_t* p,
+        size_t dataLength,
+        NALData& nalData);
 
 private:
     // Entire available stream in memory
-    size_t processSequenceParameterSet(uint8_t *&p);
-    size_t processVuiParameters(BitStream &bs);
-    size_t processPictureParameterSet(uint8_t *&p);
-    size_t processSliceLayerWithoutPartitioning(uint8_t *&p);
-    size_t processSliceHeader(uint8_t *&p);
-    size_t processAccessUnitDelimiter(uint8_t *&p);
+    size_t processSequenceParameterSet(uint8_t*& p, SequenceParameterSet& sps);
+    size_t processSequenceParameterSet(uint8_t*& p);
+    size_t processVuiParameters(BitStream& bs, VuiParameters& vuiParams);
+    size_t processVuiParameters(BitStream& bs);
+    size_t processHrdParameters(BitStream& bs, HrdParameters& hrdParams);
+    size_t processHrdParameters(BitStream& bs);
+    size_t processPictureParameterSet(uint8_t*& p, PictureParameterSet& pps);
+    size_t processPictureParameterSet(uint8_t*& p);
+    size_t processSliceLayerWithoutPartitioning(uint8_t*& p, SliceHeader& sliceHeader, const SequenceParameterSet& sps);
+    size_t processSliceLayerWithoutPartitioning(uint8_t*& p);
+    size_t processSliceHeader(uint8_t*& p, SliceHeader& sliceHeader, const SequenceParameterSet& sps);
+    size_t processSliceHeader(uint8_t*& p);
+    size_t processAccessUnitDelimiter(uint8_t*& p, AccessUnitDelimiter& aud);
+    size_t processAccessUnitDelimiter(uint8_t*& p);
     size_t processSeiMessage(uint8_t *&p, uint8_t *pLastByte);
     size_t processRecoveryPointSei(uint8_t *&p);
 
-    uint8_t EGParse(BitStream &bs, uint32_t &bitsRead);
+    uint8_t UEGParse(BitStream& bs);
+    int SEGParse(BitStream& bs);
 };

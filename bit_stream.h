@@ -12,11 +12,12 @@ public:
         Reset();
     }
 
-    uint8_t GetBits(unsigned int n)
+    // Gets up to 32 bits at a time
+    uint32_t GetBits(unsigned int n)
     {
-        assert(n >=0 && n<=8);
+        assert(n >= 0 && n <= 32);
 
-        uint8_t ret = 0;
+        uint32_t ret = 0;
 
         while(n--)
         {
@@ -27,10 +28,12 @@ public:
                 m_mask >>= 1;
                 m_pos--;
             }
-            else
+            
+            if (!m_mask)
             {
                 m_p++;
                 m_numBytes--;
+                assert(m_numBytes);
                 Reset();
             }
         }
@@ -51,7 +54,7 @@ public:
     void Reset()
     {
         m_byte = *m_p;
-        m_pos = 7;
+        m_pos = 7; // 0 - 7
         m_mask = 0x80;
     }
 

@@ -28,8 +28,10 @@
 #include <vector>
 #include <map>
 #include <memory>
+#include <any>
 #include <cstdint>
 #include <base_parser.h>
+#include "mpts_descriptors.h"
 #include "util.h"
 
 // Type definitions
@@ -218,7 +220,7 @@ typedef std::vector<mptsPidEntryType> mptsPidListType;
 struct mpts_frame
 {
     int pid;
-    int frameNumber;
+    unsigned int frameNumber;
     int totalPackets;
     mptsPidListType pidList;
     eMptsStreamType streamType;
@@ -231,6 +233,159 @@ struct mpts_frame
     {}
 };
 
+// Table 2-30 – Program association section
+struct program_pid
+{
+    program_pid(uint16_t program_number, uint16_t PID)
+        : program_number(program_number)
+        , PID(PID) {}
+
+    uint16_t program_number;
+    uint16_t PID;
+};
+
+// Table 2-30 – Program association section
+struct program_association_table
+{
+    bool payload_unit_start;
+    uint8_t payload_start_offset;
+    uint8_t table_id;
+    uint8_t section_syntax_indicator;
+    uint16_t section_length;
+    uint16_t transport_stream_id;
+    uint8_t version_number;
+    uint8_t current_next_indicator;
+    uint8_t section_number;
+    uint8_t last_section_number;
+    std::vector<program_pid> program_numbers;
+};
+
+// Table 2-33 – Transport stream program map section
+struct program_element
+{
+    program_element(uint8_t stream_type, uint16_t elementary_pid, uint16_t es_info_length)
+        : stream_type(stream_type)
+        , elementary_pid(elementary_pid)
+        , es_info_length(es_info_length) {}
+
+    uint8_t stream_type;
+    uint16_t elementary_pid;
+    uint16_t es_info_length;
+};
+
+struct program_element_descriptor
+{
+    program_element_descriptor()
+        : descriptor_tag(0)
+        , descriptor_length(0)
+    {}
+
+    program_element_descriptor(const program_element_descriptor& other)
+        : descriptor_tag(other.descriptor_tag)
+        , descriptor_length(other.descriptor_length)
+        , descriptor(other.descriptor)
+    {
+    }
+
+    void reset()
+    {
+        descriptor_tag = 0;
+        descriptor_length = 0;
+        descriptor.reset();
+    }
+
+    uint8_t descriptor_tag;
+    uint8_t descriptor_length;
+    std::shared_ptr<mpts_descriptor> descriptor;
+};
+
+// Table 2-33 – Transport stream program map section
+struct program_map_table
+{
+    bool payload_unit_start;
+    uint8_t payload_start_offset;
+    uint8_t table_id;
+    uint8_t section_syntax_indicator;
+    uint16_t section_length;
+    uint16_t program_number;
+    uint8_t version_number;
+    uint8_t current_next_indicator;
+    uint8_t section_number;
+    uint8_t last_section_number;
+    uint16_t pcr_pid;
+    uint16_t program_info_length;
+    std::vector<program_element_descriptor> program_element_descriptors;
+    std::vector<program_element> program_elements;
+};
+
+struct PES_packet
+{
+    uint32_t packet_start_code_prefix;
+    uint8_t stream_id;
+
+    /* MPTS spec - 2.4.3.7
+      PES_packet_length  A 16-bit field specifying the number of bytes in the PES packet following the last byte of the field.
+      A value of 0 indicates that the PES packet length is neither specified nor bounded and is allowed only in
+      PES packets whose payload consists of bytes from a video elementary stream contained in Transport Stream packets.
+    */
+
+    int64_t PES_packet_length;
+    uint8_t PES_scrambling_control;
+    uint8_t PES_priority;
+    uint8_t data_alignment_indicator;
+    uint8_t copyright;
+    uint8_t original_or_copy;
+    uint8_t PTS_DTS_flags;
+    uint8_t ESCR_flag;
+    uint8_t ES_rate_flag;
+    uint8_t DSM_trick_mode_flag;
+    uint8_t additional_copy_info_flag;
+    uint8_t PES_CRC_flag;
+    uint8_t PES_extension_flag;
+    /*
+        PES_header_data_length  An 8-bit field specifying the total number of bytes occupied by the optional fields and any
+        stuffing bytes contained in this PES packet header. The presence of optional fields is indicated in the byte that precedes
+        the PES_header_data_length field.
+    */
+    uint8_t PES_header_data_length;
+    uint64_t PTS;
+    uint64_t DTS;
+    uint32_t ESCR_base;
+    uint32_t ESCR_extension;
+    uint32_t ES_rate;
+    uint8_t trick_mode_control;
+    uint8_t field_id;
+    uint8_t intra_slice_refresh;
+    uint8_t frequency_truncation;
+    uint8_t rep_cntrl;
+    uint8_t additional_copy_info;
+    uint16_t previous_PES_packet_CRC;
+    uint8_t PES_private_data_flag;
+    uint8_t pack_header_field_flag;
+    uint8_t program_packet_sequence_counter_flag;
+    uint8_t P_STD_buffer_flag;
+    uint8_t PES_extension_flag_2;
+    uint8_t PES_private_data[16];
+    uint8_t pack_field_length;
+    uint8_t program_packet_sequence_counter;
+    uint8_t MPEG1_MPEG2_identifier;
+    uint8_t original_stuff_length;
+    uint8_t P_STD_buffer_scale;
+    uint8_t P_STD_buffer_size;
+    uint8_t PES_extension_field_length;
+    uint8_t stream_id_extension_flag;
+    uint8_t stream_id_extension;
+    uint8_t tref_extension_flag;
+    uint32_t TREF;
+
+    /*
+        From the TS spec:
+        stuffing_byte  This is a fixed 8-bit value equal to '1111 1111' that can be inserted by the encoder, for example to meet
+        the requirements of the channel. It is discarded by the decoder. No more than 32 stuffing bytes shall be present in one
+        PES packet header.
+    */
+};
+
 class mptsParser
 {
 public:
@@ -239,17 +394,29 @@ public:
 
     int determine_packet_size(uint8_t buffer[5]);
 
-    int16_t readPAT(uint8_t *&p, bool payloadUnitStart);
-    int16_t readPMT(uint8_t *&p, bool payloadUnitStart);
-    size_t readDescriptors(uint8_t *p, uint16_t programInfoLength);
+    size_t readPAT(uint8_t *&p, bool payloadUnitStart);
+    size_t readPAT(uint8_t*& p, program_association_table& pat, bool payloadUnitStart);
+    size_t readPMT(uint8_t *&p, bool payloadUnitStart);
+    size_t readPMT(uint8_t*& p, program_map_table& pmt, bool payloadUnitStart);
+    size_t readElementDescriptors(uint8_t* p, program_map_table& pmt);
+    size_t readElementDescriptors(uint8_t* p, uint16_t programInfoLength);
 
+    size_t processPESPacketHeader(uint8_t*& p, size_t PESPacketDataLength, PES_packet& pes_packet);
     size_t processPESPacketHeader(uint8_t *&p, size_t PESPacketDataLength);
     size_t processPESPacket(uint8_t *&packetStart, uint8_t *&p, eMptsStreamType streamType, bool payloadUnitStart);
     int16_t processPid(uint16_t pid, uint8_t *&packetStart, uint8_t *&p, int64_t packetStartInFile, size_t packetNum, bool payloadUnitStart, uint8_t adaptationFieldLength);
     uint8_t getAdaptationFieldLength(uint8_t *&p);
     uint8_t processAdaptationField(unsigned int indent, uint8_t *&p);
     int16_t processPacket(uint8_t *packet, size_t packetNum);
-    size_t processVideoFrames(uint8_t *p, size_t PESPacketDataLength, eMptsStreamType streamType, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut);
+    size_t processVideoFrames(uint8_t* p,
+        size_t PESPacketDataLength,
+        eMptsStreamType streamType,
+        unsigned int& frameNumber, // Will be incremented by 1 per parsed frame
+        unsigned int framesWanted,
+        unsigned int& framesReceived);
+    size_t processVideoFrames(uint8_t* p,
+        size_t PESPacketDataLength,
+        mpts_frame* pFrame);
 
     size_t pushVideoData(uint8_t *p, size_t size);
     size_t popVideoData();
@@ -257,9 +424,7 @@ public:
     size_t getVideoDataSize();
 
     void printFrameInfo(mpts_frame *pFrame);
-
-    bool setPrintXml(bool tf);
-    bool getPrintXml();
+    void printElementDescriptors(const program_map_table& pmt);
 
     bool setTerse(bool tf);
     bool getTerse();
@@ -274,10 +439,7 @@ private:
     template<typename... Args>
     void printfXml(int indentLevel, Args... args)
     {
-        if (m_bXml)
-        {
-            util::printfXml(indentLevel, args...);
-        }
+        util::printfXml(indentLevel, args...);
     }
 
     void inline incPtr(uint8_t *&p, size_t bytes);
@@ -296,10 +458,9 @@ private:
     size_t m_videoDataSize;
     size_t m_videoBufferSize;
 
-    std::map <uint16_t, char *> m_pidMap; // ID, name
+    std::map <uint16_t, char *> m_pidToNameMap; // ID, name
     std::map <uint16_t, eMptsStreamType> m_pidToTypeMap; // PID, stream type
 
-    bool m_bXml;
     bool m_bTerse;
     bool m_bAnalyzeElementaryStream;
 

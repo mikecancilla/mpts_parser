@@ -28,10 +28,8 @@
 #include "mpeg2_parser.h"
 #include "util.h"
 
-size_t mpeg2Parser::processVideoFrames(uint8_t *p, size_t PESPacketDataLength, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut)
+size_t mpeg2Parser::processVideoFrames(uint8_t *p, size_t PESPacketDataLength, unsigned int& frameNumber, unsigned int framesWanted, unsigned int &framesReceived)
 {
-    m_bXmlOut = bXmlOut;
-
     uint8_t *pStart = p;
     size_t bytesProcessed = 0;
     bool bDone = false;
@@ -129,7 +127,7 @@ size_t mpeg2Parser::processVideoPES(uint8_t *p, size_t PESPacketDataLength)
 
     while(bytesProcessed < PESPacketDataLength && !bDone)
     {
-        bytesProcessed += processVideoFrames(p, PESPacketDataLength, 1, framesReceived);
+        bytesProcessed += processVideoFrames(p, PESPacketDataLength, m_frameNumber, 1, framesReceived);
     }
 
     return p - pStart;

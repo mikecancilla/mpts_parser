@@ -32,7 +32,6 @@
 
 namespace util
 {
-
     inline uint16_t read2Bytes(uint8_t* p)
     {
         uint16_t ret = *p++;
@@ -143,9 +142,16 @@ namespace util
         return 4;
     }
 
+    static bool g_bXmlOut = false;
+
+    void inline setXmlOutput(bool tf)
+    {
+        g_bXmlOut = tf;
+    }
+
     void inline printfXml(unsigned int indentLevel, const char* format, ...)
     {
-        if (format)
+        if (g_bXmlOut && format)
         {
             char outputBuffer[512] = "";
 
@@ -163,4 +169,58 @@ namespace util
             printf(outputBuffer);
         }
     }
+
+/*
+    // Singleton
+    class XmlOutput
+    {
+    private:
+        static XmlOutput* pInstance;
+        bool m_bXmlOutput = false;
+
+        XmlOutput() {}
+
+    public:
+        XmlOutput(const XmlOutput& obj) = delete; // No copy constructor
+
+        static XmlOutput* getInstance()
+        {
+            if (nullptr == pInstance)
+            {
+                pInstance = new XmlOutput;
+                return pInstance;
+            }
+            else
+            {
+                return pInstance;
+            }
+        }
+
+        void setOutput(bool bXmlOutput)
+        {
+            m_bXmlOutput = bXmlOutput;
+        }
+
+        void inline printfXml(unsigned int indentLevel, const char* format, ...)
+        {
+            if (m_bXmlOutput && format)
+            {
+                char outputBuffer[512] = "";
+
+                for (unsigned int i = 0; i < indentLevel; i++)
+                    strcat_s(outputBuffer, sizeof(outputBuffer), "  ");
+
+                va_list arg_list;
+                va_start(arg_list, format);
+                vsprintf_s(outputBuffer + (indentLevel * 2),
+                    sizeof(outputBuffer) - (indentLevel * 2),
+                    format,
+                    arg_list);
+                va_end(arg_list);
+
+                printf(outputBuffer);
+            }
+        }
+    };
+*/
 }

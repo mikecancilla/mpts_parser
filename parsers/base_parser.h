@@ -1,19 +1,28 @@
 #pragma once
 
 #include <cstdint>
+#include <any>
 
 class baseParser
 {
-protected:
-    bool m_bXmlOut;
-
 public:
-    baseParser()
-      : m_bXmlOut(false)
-    {}
+    baseParser() {}
 
-    // Process the number of video frames_wanted pointed to by p, of length data_length.
-    // Print xml if m_bXmlOut is true
+    virtual size_t processVideoFrame(uint8_t* p,
+        size_t dataLength,
+        std::any& returnData)
+    {
+        return 0;
+    }
+
+    // Process the number of video frames_wanted pointed to by p, of length dataLength.
     // Return number of frames actually processed in frames_received
-    virtual size_t processVideoFrames(uint8_t *p, size_t dataLength, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut) = 0;
+    virtual size_t processVideoFrames(uint8_t* p,
+        size_t dataLength,
+        unsigned int& frameNumber, // Will be incremented by 1 per parsed frame
+        unsigned int framesWanted,
+        unsigned int& framesReceived)
+    {
+        return 0;
+    }
 };

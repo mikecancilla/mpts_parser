@@ -131,13 +131,18 @@ public:
 
     mpeg2Parser()
         : m_nextMpeg2ExtensionType(sequence_extension)
+        , m_frameNumber(0)
     {}
 
     // Process framesWanted frames at a time
-    virtual size_t processVideoFrames(uint8_t *p, size_t PESPacketDataLength, unsigned int framesWanted, unsigned int &framesReceived, bool bXmlOut = false) override;
+    virtual size_t processVideoFrames(uint8_t* p,
+        size_t PESPacketDataLength,
+        unsigned int& frameNumber, // Will be incremented by 1 per parsed frame
+        unsigned int framesWanted,
+        unsigned int& framesReceived) override;
 
 private:
-    // Entire available stream in memory
+    // Entire stream data available in memory
     size_t processVideoPES(uint8_t *p, size_t PESPacketDataLength);
     size_t processSequenceHeader(uint8_t *&p);
     size_t processSequenceExtension(uint8_t *&p);
@@ -152,4 +157,5 @@ private:
     size_t processSlice(uint8_t *&p);
 
     eMpeg2ExtensionType m_nextMpeg2ExtensionType;
+    unsigned int m_frameNumber = 0;
 };
