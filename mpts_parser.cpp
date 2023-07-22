@@ -99,7 +99,7 @@ void inline mptsParser::incPtr(uint8_t *&p, size_t bytes)
 
 // Table 2-34
 // Initialize a map of ID to string type
-void mptsParser::initStreamTypes(std::map <uint16_t, char *> &streamMap)
+void mptsParser::initStreamTypes(std::map <uint16_t, const char *> &streamMap)
 {
     streamMap[0x0] = "Reserved";	                            
     streamMap[0x1] = "MPEG-1 Video";
@@ -501,7 +501,7 @@ size_t mptsParser::readPMT(uint8_t *&p, bool payloadUnitStart)
     //my_printf("program_number:%d, pcr_pid:%x\n", program_number, pcr_pid);
     //my_printf("  Elementary Streams:\n");
 
-    std::map <uint16_t, char *> streamMap; // ID, name
+    std::map <uint16_t, const char *> streamMap; // ID, name
     initStreamTypes(streamMap);
 
     // This has to be done by hand
@@ -1790,7 +1790,6 @@ size_t mptsParser::processPESPacketHeader(uint8_t*& p, size_t PESPacketDataLengt
 
             if (pes_packet.PES_private_data_flag)
             {
-                pes_packet.PES_private_data[16];
                 std::memcpy(pes_packet.PES_private_data, p, 16);
                 incPtr(p, 16);
             }
@@ -2504,7 +2503,7 @@ int16_t mptsParser::processPid(uint16_t pid, uint8_t *&packetStart, uint8_t *&p,
 
         printElementDescriptors(pmt);
 
-        std::map <uint16_t, char*> streamMap; // ID, name
+        std::map <uint16_t, const char*> streamMap; // ID, name
         initStreamTypes(streamMap);
         size_t stream_count = 0;
 
@@ -2578,6 +2577,9 @@ int16_t mptsParser::processPid(uint16_t pid, uint8_t *&packetStart, uint8_t *&p,
                 case eSDDS_Audio:
                     //p_frame = &m_audioFrame;
                     //p_frame->pid = pid;
+                break;
+
+                default:
                 break;
             }
 
@@ -2776,7 +2778,11 @@ int16_t mptsParser::processPacket(uint8_t *packet, size_t packetNum)
     {
         printfXml(2, "<error>Packet %zd does not start with 0x47</error>\n", packetNum);
         fprintf(stderr, "Error: Packet %zd does not start with 0x47\n", packetNum);
-        goto process_packet_error;
+
+        if(false == m_bTerse)
+            printfXml(1, "</packet>\n");
+
+        return ret;
     }
 
     // Skip the sync byte 0x47
@@ -2827,8 +2833,6 @@ int16_t mptsParser::processPacket(uint8_t *packet, size_t packetNum)
         adaptation_field_length = getAdaptationFieldLength(p);
 
     ret = processPid(pid, packet, p, packetStartInFile, packetNum, 1 == payload_unit_start_indicator, adaptation_field_length);
-
-process_packet_error:
 
     if(false == m_bTerse)
         printfXml(1, "</packet>\n");
@@ -2944,7 +2948,7 @@ void printSpsData(const SequenceParameterSet& sps)
         for (int i = 0; i < sps.num_ref_frames_in_pic_order_cnt_cycle; i++)
         {
             // TODO: Create an array
-            util::printfXml(3, "<offset_for_ref_frame[%d]>%d</offset_for_ref_frame>\n", i, sps.offset_for_ref_frame);
+            util::printfXml(3, "<offset_for_ref_frame[%d]>%d</offset_for_ref_frame>\n", i, sps.offset_for_ref_frame[i]);
         }
     }
 
@@ -3002,7 +3006,7 @@ size_t mptsParser::processVideoFrames(uint8_t* p,
 
         if (0x000001 != start_code_prefix)
         {
-            fprintf(stderr, "WARNING: Bad data found %llu bytes into this frame.  Searching for next start code...\n", bytesProcessed);
+            fprintf(stderr, "WARNING: Bad data found %lu bytes into this frame.  Searching for next start code...\n", bytesProcessed);
             size_t count = util::nextStartCode(p, PESPacketDataLength);
 
             if (-1 == count)
@@ -3096,7 +3100,10 @@ size_t mptsParser::processVideoFrames(uint8_t* p,
 
                 printfXml(1, "</frame>\n");
 
-                break;
+            break;
+
+            default:
+            break;
         }
 
         if (framesWanted == framesReceived)
@@ -3126,7 +3133,7 @@ RETRY:
 
         if(0x000001 != start_code_prefix)
         {
-            fprintf(stderr, "WARNING: Bad data found %llu bytes into this frame.  Searching for next start code...\n", bytesProcessed);
+            fprintf(stderr, "WARNING: Bad data found %lu bytes into this frame.  Searching for next start code...\n", bytesProcessed);
             size_t count = util::nextStartCode(p, PESPacketDataLength);
 
             if(-1 == count)

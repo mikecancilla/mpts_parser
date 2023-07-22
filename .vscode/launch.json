@@ -1,0 +1,24 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Build and debug mpts_parser",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/mpts_parser",
+            "args": [
+                "-e",
+                "/Volumes/ExtremeSSD/streams/mpts/clip06.ts"
+            ],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb"
+            //"preLaunchTask": "build mpts_parser"
+        },
+    ]
+}

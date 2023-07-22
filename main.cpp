@@ -88,7 +88,7 @@ int main(int argc, char* argv[])
     int64_t readBlockSize = 0;
 
 	FILE *inputFile = nullptr;
-	fopen_s(&inputFile, argv[argc - 1], "rb");
+	inputFile = fopen(argv[argc - 1], "rb");
 
 	if (nullptr == inputFile)
     {
@@ -104,9 +104,9 @@ int main(int argc, char* argv[])
     _stat64(argv[argc - 1], &stat64Buf);
     fileSize = stat64Buf.st_size;
 #else
-    fseek(f, 0L, SEEK_END);
-    fileSize = ftell(f);
-    fseek(f, 0L, SEEK_SET);
+    fseek(inputFile, 0L, SEEK_END);
+    fileSize = ftell(inputFile);
+    fseek(inputFile, 0L, SEEK_SET);
 #endif
 
     // Need to determine packet size.

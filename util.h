@@ -24,8 +24,9 @@
 
 #pragma once
 
-#include <cstdio>
+#include <string>
 #include <cstdint>
+#include <cstddef>
 #include <cstring>
 #include <cstdarg>
 #include <cassert>
@@ -82,7 +83,7 @@ namespace util
         while (*p != 0 ||
             *(p + 1) != 0 ||
             *(p + 2) != 1 &&
-            count < dataLength)
+            (count < dataLength))
         {
             incrementPtr(p, 1);
             count++;
@@ -155,18 +156,20 @@ namespace util
         {
             char outputBuffer[512] = "";
 
+            // See here: https://en.cppreference.com/w/cpp/io/c/vfprintf
+            
             for (unsigned int i = 0; i < indentLevel; i++)
-                strcat_s(outputBuffer, sizeof(outputBuffer), "  ");
+                strncpy(outputBuffer + (i * 2), "  ", 2);
 
             va_list arg_list;
             va_start(arg_list, format);
-            vsprintf_s(outputBuffer + (indentLevel * 2),
-                sizeof(outputBuffer) - (indentLevel * 2),
+            vsnprintf(outputBuffer + (indentLevel * 2),
+                512,
                 format,
                 arg_list);
             va_end(arg_list);
 
-            printf(outputBuffer);
+            printf("%s", outputBuffer);
         }
     }
 
