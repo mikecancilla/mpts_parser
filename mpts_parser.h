@@ -443,7 +443,7 @@ private:
     }
 
     void inline incPtr(uint8_t *&p, size_t bytes);
-    void initStreamTypes(std::map <uint16_t, char *> &streamMap);
+    void initStreamTypes(std::map <uint16_t, const char *> &streamMap);
 
     uint64_t readTimeStamp(uint8_t *&p);
     float convertTimeStamp(uint64_t timeStamp);
@@ -458,7 +458,7 @@ private:
     size_t m_videoDataSize;
     size_t m_videoBufferSize;
 
-    std::map <uint16_t, char *> m_pidToNameMap; // ID, name
+    std::map <uint16_t, const char *> m_pidToNameMap; // ID, name
     std::map <uint16_t, eMptsStreamType> m_pidToTypeMap; // PID, stream type
 
     bool m_bTerse;
