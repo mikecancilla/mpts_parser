@@ -12,23 +12,23 @@ public:
         Reset();
     }
 
-    // Gets up to 32 bits at a time
-    uint32_t GetBits(unsigned int n)
+    // Gets up to 64 bits at a time
+    uint64_t GetBits(unsigned int n)
     {
-        assert(n >= 0 && n <= 32);
+        assert(n >= 0 && n <= 64);
 
-        uint32_t ret = 0;
+        uint64_t ret = 0;
 
-        while(n--)
+        while (n--)
         {
-            if(m_mask)
+            if (m_mask)
             {
                 ret <<= 1;
                 ret |= (m_byte & m_mask) >> m_pos;
                 m_mask >>= 1;
                 m_pos--;
             }
-            
+
             if (!m_mask)
             {
                 m_p++;

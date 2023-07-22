@@ -2981,6 +2981,7 @@ void printSpsData(const SequenceParameterSet& sps)
 
     util::printfXml(1, "</SPS>\n");
 }
+
 void printNalData(const NALData& nalData)
 {
     printSpsData(nalData.sequence_parameter_set);
