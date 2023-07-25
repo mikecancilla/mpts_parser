@@ -43,7 +43,7 @@ RETRY:
 
         if(0x000001 != startCodePrefix)
         {
-            fprintf(stderr, "WARNING: Bad data found %llu bytes into this frame.  Searching for next start code...\n", bytesProcessed);
+            fprintf(stderr, "WARNING: Bad data found %lu bytes into this frame.  Searching for next start code...\n", bytesProcessed);
             size_t count = util::nextStartCode(p, PESPacketDataLength);
 
             if(-1 == count)
@@ -302,6 +302,9 @@ size_t mpeg2Parser::processExtension(uint8_t *&p)
         break;
 
         case extension_and_user_data_2:
+        break;
+
+        default:
         break;
     }
 

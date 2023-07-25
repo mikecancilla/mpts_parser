@@ -134,6 +134,9 @@ ProcessNaluResult avcParser::processNalu(uint8_t* p,
             ret.result = eAVCNaluType_CodedSliceNonIdrPicture;
             bDone = true;
             break;
+
+        default:
+            break;
         }
 
         p = pNaluDataStart + NumBytesInNALunit;
